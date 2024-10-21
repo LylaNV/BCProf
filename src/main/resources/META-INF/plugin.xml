@@ -5,12 +5,31 @@
     <vendor>lylanv</vendor>
 
     <depends>com.intellij.modules.platform</depends>
+    <depends>org.jetbrains.android</depends>
+    <depends>com.android.tools.idea.smali</depends>
+    <depends>com.intellij.java</depends>
+    <depends>com.intellij.modules.androidstudio</depends>
+<!--    <depends>com.android.tools.design</depends>-->
 
     <resource-bundle>messages.MyBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow factoryClass="com.github.lylanv.secdroid.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
     </extensions>
+
+    <actions>
+        <group
+                id="EnergyActionGroup"
+                description="Energy action group">
+            <action
+                    id="com.github.lylanv.secdroid.inspections.DroidEC"
+                    class="com.github.lylanv.secdroid.inspections.DroidEC"
+                    text="DroidEC"
+                    description="Energy profiler button"/>
+            <add-to-group group-id="RunMenu" anchor="last"/>
+            <!--add-to-group group-id="ToolsMenu" anchor="first"/-->
+        </group>
+    </actions>
 
     <applicationListeners>
         <listener class="com.github.lylanv.secdroid.listeners.MyApplicationActivationListener" topic="com.intellij.openapi.application.ApplicationActivationListener"/>
