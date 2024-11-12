@@ -35,6 +35,12 @@ repositories {
 dependencies {
     testImplementation(libs.junit)
 
+    //    implementation(libs.annotations)
+    implementation("org.jfree:jfreechart:1.5.3")
+    //implementation("com.android.tools.ddmlib:ddmlib:23.4.0")
+    implementation(kotlin("stdlib"))
+
+
     // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
     intellijPlatform {
         create(providers.gradleProperty("platformType"), providers.gradleProperty("platformVersion"))

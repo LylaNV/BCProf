@@ -15,7 +15,10 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow factoryClass="com.github.lylanv.secdroid.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
+        <toolWindow factoryClass="com.github.lylanv.secdroid.inspections.LogcatAnalyzerToolWindowFactory" id="GreenMeterToolWindow" anchor="left"/>
+        <toolWindow factoryClass="com.github.lylanv.secdroid.inspections.TestToolWindowFactory" id="TestingToolWindow" anchor="left"/>
     </extensions>
+
 
     <actions>
         <group
@@ -33,5 +36,7 @@
 
     <applicationListeners>
         <listener class="com.github.lylanv.secdroid.listeners.MyApplicationActivationListener" topic="com.intellij.openapi.application.ApplicationActivationListener"/>
+        <listener class="com.github.lylanv.secdroid.inspections.AndroidProjectBuildListener" topic="com.android.tools.idea.projectsystem.ProjectSystemBuildManager$BuildListener"/>
+        <listener class="com.github.lylanv.secdroid.inspections.AndroidProjectExecutionListener" topic="com.intellij.execution.ExecutionListener"/>
     </applicationListeners>
 </idea-plugin>
