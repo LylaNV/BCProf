@@ -1,7 +1,8 @@
-package com.github.lylanv.secdroid.inspections;
+package com.github.lylanv.secdroid.listeners;
 
 import com.github.lylanv.secdroid.events.ApplicationStartedEvent;
 import com.github.lylanv.secdroid.events.ApplicationStoppedEvent;
+import com.github.lylanv.secdroid.inspections.EventBusManager;
 import com.intellij.execution.ExecutionListener;
 import com.intellij.execution.process.ProcessHandler;
 import com.intellij.execution.runners.ExecutionEnvironment;

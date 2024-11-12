@@ -35,7 +35,7 @@
 
     <applicationListeners>
         <listener class="com.github.lylanv.secdroid.listeners.MyApplicationActivationListener" topic="com.intellij.openapi.application.ApplicationActivationListener"/>
-        <listener class="com.github.lylanv.secdroid.inspections.AndroidProjectBuildListener" topic="com.android.tools.idea.projectsystem.ProjectSystemBuildManager$BuildListener"/>
-        <listener class="com.github.lylanv.secdroid.inspections.AndroidProjectExecutionListener" topic="com.intellij.execution.ExecutionListener"/>
+        <listener class="com.github.lylanv.secdroid.listeners.AndroidProjectBuildListener" topic="com.android.tools.idea.projectsystem.ProjectSystemBuildManager$BuildListener"/>
+        <listener class="com.github.lylanv.secdroid.listeners.AndroidProjectExecutionListener" topic="com.intellij.execution.ExecutionListener"/>
     </applicationListeners>
 </idea-plugin>
