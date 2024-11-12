@@ -14,9 +14,8 @@
     <resource-bundle>messages.MyBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow factoryClass="com.github.lylanv.secdroid.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
-        <toolWindow factoryClass="com.github.lylanv.secdroid.inspections.LogcatAnalyzerToolWindowFactory" id="GreenMeterToolWindow" anchor="left"/>
-        <toolWindow factoryClass="com.github.lylanv.secdroid.inspections.TestToolWindowFactory" id="TestingToolWindow" anchor="left"/>
+<!--        <toolWindow factoryClass="com.github.lylanv.secdroid.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>-->
+        <toolWindow factoryClass="com.github.lylanv.secdroid.toolWindows.LogcatAnalyzerToolWindowFactory" id="TestingToolWindow" anchor="left"/>
     </extensions>
 
 

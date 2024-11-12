@@ -1,11 +1,13 @@
-package com.github.lylanv.secdroid.inspections;
+package com.github.lylanv.secdroid.toolWindows;
 
+import com.github.lylanv.secdroid.inspections.EventBusManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowFactory;
+import com.intellij.openapi.wm.ex.ToolWindowManagerListener;
 import com.intellij.ui.components.JBScrollPane;
-import com.intellij.ui.components.JBTextArea;
 import com.intellij.ui.content.ContentFactory;
+import com.intellij.util.messages.MessageBusConnection;
 import org.jetbrains.annotations.NotNull;
 import org.jfree.chart.ChartFactory;
 import org.jfree.chart.ChartPanel;
@@ -15,19 +17,19 @@ import org.jfree.data.category.DefaultCategoryDataset;
 import org.jfree.data.time.Second;
 import org.jfree.data.time.TimeSeries;
 import org.jfree.data.time.TimeSeriesCollection;
-import org.jfree.data.xy.XYSeries;
-import org.jfree.data.xy.XYSeriesCollection;
 
 import javax.swing.*;
 import java.awt.*;
-import java.util.Map;
 
-public class TestToolWindowFactory implements ToolWindowFactory {
+public class LogcatAnalyzerToolWindowFactory implements ToolWindowFactory {
+
+    private Thread logcatAnalyzerThread;
+    private LogCatReader logcatReader;
+
 
     private static JTextArea textArea;
     private static JTable table;
     private static DefaultCategoryDataset barChartDataset;
-//    private static XYSeries lineGraphSeries;
     private static TimeSeries lineGraphSeries;
 
     @Override
@@ -41,7 +43,28 @@ public class TestToolWindowFactory implements ToolWindowFactory {
         tabbedPane.addTab("Bar Chart", createBarChartComponent());
         tabbedPane.addTab("Line Graph", createLineGraphComponent());
 
-        toolWindow.getContentManager().addContent(ContentFactory.getInstance().createContent(tabbedPane, "Example Tool Window", false));
+        toolWindow.getContentManager().addContent(ContentFactory.getInstance().createContent(tabbedPane, "Energy Consumption Result", false));
+
+        // Create new thread to analyze the logcat file
+        logcatReader = new LogCatReader();
+        EventBusManager.register(logcatReader);
+        logcatAnalyzerThread = new Thread(logcatReader);
+        logcatAnalyzerThread.start();
+
+        MessageBusConnection connection = project.getMessageBus().connect(project);
+        connection.subscribe(ToolWindowManagerListener.TOPIC, new ToolWindowManagerListener() {
+            @Override
+            public void toolWindowShown(ToolWindow window) {
+                if (window.getId().equals(toolWindow.getId())) {
+                    if (logcatAnalyzerThread == null || !logcatAnalyzerThread.isAlive()) {
+                        logcatReader = new LogCatReader();
+                        EventBusManager.register(logcatReader);
+                        logcatAnalyzerThread = new Thread(logcatReader);
+                        logcatAnalyzerThread.start();
+                    }
+                }
+            }
+        });
     }
 
     private JComponent createTextComponent() {
@@ -69,31 +92,21 @@ public class TestToolWindowFactory implements ToolWindowFactory {
     }
 
     private JComponent createBarChartComponent() {
-        // Assuming you have added JFreeChart as a dependency
         barChartDataset = new DefaultCategoryDataset();
-//        barChartDataset.addValue(5, "Category 1", "Value A");
-//        barChartDataset.addValue(3, "Category 1", "Value B");
-//        barChartDataset.addValue(7, "Category 1", "Value C");
 
-        JFreeChart chart = ChartFactory.createBarChart("Bar Chart Example", "Category", "Value", barChartDataset, PlotOrientation.VERTICAL, false, true, false);
+        JFreeChart chart = ChartFactory.createBarChart(
+                "Red API Calls Count",
+                "Category",
+                "Count",
+                barChartDataset, PlotOrientation.VERTICAL,
+                true, true, false);
+                //false, true, false);
         ChartPanel chartPanel = new ChartPanel(chart);
         chartPanel.setPreferredSize(new Dimension(400, 300));
         return chartPanel;
     }
 
     private JComponent createLineGraphComponent() {
-//        // Assuming you have added JFreeChart as a dependency
-//        lineGraphSeries = new XYSeries("Random Data");
-//        lineGraphSeries.add(1, 5);
-//        lineGraphSeries.add(2, 7);
-//        lineGraphSeries.add(3, 6);
-//        lineGraphSeries.add(4, 8);
-//
-//        XYSeriesCollection dataset = new XYSeriesCollection(lineGraphSeries);
-//        JFreeChart chart = ChartFactory.createXYLineChart("Line Graph Example", "X", "Y", dataset, PlotOrientation.VERTICAL, false, true, false);
-//        ChartPanel chartPanel = new ChartPanel(chart);
-//        chartPanel.setPreferredSize(new Dimension(400, 300));
-//        return chartPanel;
 
         // Create a time series for the line graph
         lineGraphSeries = new TimeSeries("Dynamic Data");
@@ -102,7 +115,13 @@ public class TestToolWindowFactory implements ToolWindowFactory {
         TimeSeriesCollection dataset = new TimeSeriesCollection(lineGraphSeries);
 
         // Create the line chart with time on the X-axis and data on the Y-axis
-        JFreeChart chart = ChartFactory.createTimeSeriesChart("Time Series Line Graph", "Time", "Value", dataset, false, true, false);
+        JFreeChart chart = ChartFactory.createTimeSeriesChart(
+                "Application Battery Consumption",
+                "Time",
+                "Battery Percentage",
+                dataset,
+                true, true, false);
+                //false, true, false);
         ChartPanel chartPanel = new ChartPanel(chart);
         chartPanel.setPreferredSize(new Dimension(400, 300));
 
@@ -110,10 +129,8 @@ public class TestToolWindowFactory implements ToolWindowFactory {
 
     }
 
-
     // Methods to update each component
     public static void updateText(String newText) {
-        //textArea.setText(newText);
         textArea.append("\n");
         textArea.append(newText);
     }
@@ -122,20 +139,11 @@ public class TestToolWindowFactory implements ToolWindowFactory {
         table.setModel(new javax.swing.table.DefaultTableModel(newData, new String[]{"Column 1", "Column 2", "Column 3"}));
     }
 
-//    public static void updateBarChart(Map<String, Integer> logLevelCount) {
-//        barChartDataset = new DefaultCategoryDataset();
-//        for (Map.Entry<String, Integer> entry : logLevelCount.entrySet()) {
-//            barChartDataset.addValue(entry.getValue(), entry.getKey(), "");
-//        }
-//    }
 
     public static void updateBarChart(Number value, String rowKey, String columnKey) {
         barChartDataset.setValue(value, rowKey, columnKey);
     }
 
-//    public static void updateLineGraph(Number x, Number y) {
-//        lineGraphSeries.add(x, y);
-//    }
 
     // Method to update only the vertical axis value on the line graph
     public static void updateLineGraph(Number yValue) {
@@ -143,11 +151,9 @@ public class TestToolWindowFactory implements ToolWindowFactory {
     }
 
     public static void clearAllComponents(){
-        //Zero the local variables
 
         textArea.setText("");
-        //table.removeAll();
-        // Clear table (set an empty model)
+
         //TODO: check the table clearance!
         table.setModel(new javax.swing.table.DefaultTableModel(new Object[][]{}, new String[]{"Column 1", "Column 2", "Column 3"}));
         barChartDataset.clear();

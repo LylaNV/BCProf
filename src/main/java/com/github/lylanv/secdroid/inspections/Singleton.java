@@ -244,9 +244,14 @@ public class Singleton {
 
     }
 
+
     private void setJointRedAPIsParents(){
         hwAPICalls.put("MediaPlayer.create",1);
     }
+
+//    public int getEnergyConsumptionOfRedAPI(String redAPICallName){
+//        return redAPICalls.get(redAPICallName);
+//    }
 
 //    public void setProject(final Project project) {
 //        this.project = project;
