@@ -25,9 +25,7 @@ import com.intellij.util.xml.ConvertContext;
 import org.jetbrains.android.facet.AndroidFacet;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 
 public class DroidEC extends AnAction {
     Project project; //Holds the project
@@ -43,13 +41,14 @@ public class DroidEC extends AnAction {
     PsiAnnotation annotation; //Holds annotation
     PsiDirectory projectDirectory; //Holds the project directory
     ImportChecker importChecker; //Holds an instance of ImportChecker class -> this variable is used to check the list of the imports in the project and add any missing one
-    Boolean importStatementNeeded; //Determines if there is any missing import
+    Boolean importLogStatementAvailable; //Determines if there is any missing import
     private final String Logging_TAG = "GreenMeter"; //A TAG that we use in adding logs, so we can differentiate our added logs from rest of logs
+    private final String MethodStart_TAG = "METHOD_START";
+    private final String MethodEnd_TAG = "METHOD_END";
 
     public static Singleton singleton; //Holds none changeable and needed variables by other classes such as project
 
     String START_OF_METHOD_ANNOTATION_CLASS = "StartOfMethod"; //Holds annotation text
-
 
     @Override
     public void actionPerformed(@NotNull AnActionEvent event) {
@@ -153,11 +152,14 @@ public class DroidEC extends AnAction {
 
         //createAnnotationFile(project,projectDirectory,START_OF_METHOD_ANNOTATION_CLASS);
 
-        //Gets all the Java files in the project even the test files
-        //https://intellij-support.jetbrains.com/hc/en-us/community/posts/360009512280-Find-all-PsiClasses-in-Project
-        containingFiles = FileBasedIndex.getInstance().getContainingFiles(FileTypeIndex.NAME,
-                JavaFileType.INSTANCE,
-                GlobalSearchScope.projectScope(project));
+        /*
+        * Gets all the Java files in the project even the test files
+        * https://intellij-support.jetbrains.com/hc/en-us/community/posts/360009512280-Find-all-PsiClasses-in-Project
+        * containingFiles = FileBasedIndex.getInstance().getContainingFiles(FileTypeIndex.NAME, JavaFileType.INSTANCE, GlobalSearchScope.projectScope(project));
+        * Since FileTypeIndex.NAME is deprecated, it is replaced by following line of code.
+        * */
+        containingFiles = FileTypeIndex.getFiles(JavaFileType.INSTANCE, GlobalSearchScope.projectScope(project));
+
         if (containingFiles.toArray().length == 0) {
             System.out.println("[GreenMeter -> actionPerformed$ Fatal error: there is no file in the project!");
             return;
@@ -166,7 +168,7 @@ public class DroidEC extends AnAction {
         //Gets the classes in each file in the project
         for (VirtualFile virtualFile : containingFiles) {
             /*
-             * By this if we exclude all java files that are not in the main folder of the project such as test files
+             * By this "if", we exclude all java files that are not in the main folder of the project such as test files
              * to be more precise androidTest and test
              * Filters the Java files in the project to access the Java files with actual source code of the application
              * */
@@ -178,10 +180,20 @@ public class DroidEC extends AnAction {
                     //retrieveClasses(psiClasses); //Calls methods that annotate methods - WORKING
                     //Determines if there is any missing import
                     //Be careful, we need to first call the checkImports function then the addLogImportStatement function
-                    importStatementNeeded = importChecker.checkImports(virtualFile,psiManager);
+                    importLogStatementAvailable = importChecker.checkImports(virtualFile,psiManager);
+                    //To detect methods in the code we first need to extract class in the source code
+                    logMethodsStart(psiClasses);
+
+
                     analyzeAndroidAPIs(virtualFile);
-                    //Missing imports should be added after log statements; otherwise, we will get error that we try to change the un-commited document
-                    importChecker.addLogImportStatement();
+
+                    /*
+                    * IMPORTANT NOTE: Missing imports should be added after log statements; otherwise, we will get error that we try to change the un-commited document
+                    * Add the import log statement if it is not exist
+                    * */
+                    if (!importLogStatementAvailable) {
+                        importChecker.addLogImportStatement();
+                    }
 
                 }
             }
@@ -217,6 +229,63 @@ public class DroidEC extends AnAction {
         }
 
         return classes;
+    }
+
+
+    private void logMethodsStart(PsiClass[] psiClasses) {
+        //Extracts the class from the classes array
+        for (PsiClass psiClass : psiClasses) {
+            String className = psiClass.getName();
+            System.out.println("[GreenMeter -> actionPerformed -> logMethodsStart$ The class name is " + className);
+
+            //Get all the methods in the class
+            psiMethods = psiClass.getMethods();
+
+            for (PsiMethod psiMethod : psiMethods) {
+                String methodName = psiMethod.getName();
+                System.out.println("[GreenMeter -> actionPerformed -> logMethodsStart$ The method name is " + methodName);
+
+                //Get method body
+                PsiCodeBlock methodBody = psiMethod.getBody();
+
+                if (methodBody == null) {
+                    System.out.println("[GreenMeter -> actionPerformed -> logMethodsStart$ The " + methodName + " method is empty so it will not consume energy!");
+                }else {
+
+                    //Extract Android API calls from the method body
+                    retrieveAPICallsInMethod(methodBody);
+
+                    //Generate the method start log statement
+                    String startLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodName + "," + className + "," + MethodStart_TAG + ")\");";
+                    PsiStatement startLogStatementElement = factory.createStatementFromText(startLogStatement,psiMethod);
+
+                    //Generate the method end log statement
+                    String endLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodName + "," + className + "," + MethodEnd_TAG + ")\");";
+                    PsiStatement endLogStatementElement = factory.createStatementFromText(endLogStatement,psiMethod);
+
+                    CodeStyleManager codeStyleManager = CodeStyleManager.getInstance(project);
+
+                    //Add the method start log statement
+                    WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {methodBody.addBefore(startLogStatementElement, methodBody.getFirstBodyElement());});
+
+                    //Add the method end log statement
+                    WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {methodBody.add(endLogStatementElement);});
+                }
+            }
+        }
+    }
+
+    public static void retrieveAPICallsInMethod(PsiCodeBlock methodBody) {
+        List<PsiMethodCallExpression> methodCalls = new ArrayList<>();
+
+        methodCalls.addAll(PsiTreeUtil.collectElementsOfType(methodBody, PsiMethodCallExpression.class));
+
+        for (PsiMethodCallExpression psiMethodCallExpression : methodCalls) {
+            PsiReferenceExpression methodExpression = psiMethodCallExpression.getMethodExpression();
+            String methodName = methodExpression.getReferenceName();  // Get the method name
+            System.out.println("-----------Method call found: " + methodName);
+        }
+
     }
 
 //    // This method annotates methods - WORKING
@@ -479,10 +548,10 @@ public class DroidEC extends AnAction {
 
         if (parent != null) {
             int lineNumber; // Holds the exact line number of the API call
-            if (importStatementNeeded){
+            if (importLogStatementAvailable){
                 lineNumber = getLineNumber(parent) + 1;
             }else {
-                lineNumber = getLineNumber(parent) + 2;
+                lineNumber = getLineNumber(parent) + 3;
             }
 
             //String logStatement = "Log.d(\"" + Logging_TAG + "\", \"" + methodCallName + ", File: " + javaFile + ", Line number is " + lineNumber + "\");";
