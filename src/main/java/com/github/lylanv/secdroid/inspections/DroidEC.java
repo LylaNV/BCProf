@@ -1,5 +1,7 @@
 package com.github.lylanv.secdroid.inspections;
 
+import com.github.lylanv.secdroid.utils.ThreeStringKey;
+import com.github.lylanv.secdroid.utils.TwoStringKey;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import org.jetbrains.annotations.NotNull;
@@ -9,21 +11,13 @@ import com.intellij.openapi.actionSystem.PlatformDataKeys;
 import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
-import com.intellij.openapi.module.Module;
-import com.intellij.openapi.module.ModuleManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
 import com.intellij.psi.codeStyle.CodeStyleManager;
-import com.intellij.psi.javadoc.PsiDocComment;
 import com.intellij.psi.search.FileTypeIndex;
 import com.intellij.psi.search.GlobalSearchScope;
-import com.intellij.psi.search.PsiShortNamesCache;
 import com.intellij.psi.util.PsiTreeUtil;
-import com.intellij.util.indexing.FileBasedIndex;
-import com.intellij.util.xml.ConvertContext;
-import org.jetbrains.android.facet.AndroidFacet;
-import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
@@ -45,6 +39,9 @@ public class DroidEC extends AnAction {
     private final String Logging_TAG = "GreenMeter"; //A TAG that we use in adding logs, so we can differentiate our added logs from rest of logs
     private final String MethodStart_TAG = "METHOD_START";
     private final String MethodEnd_TAG = "METHOD_END";
+
+    private Map<ThreeStringKey, Integer> methodsAPICallsCountLocalMap = new HashMap<>();
+    private Map<TwoStringKey, Double> methodsAPICallsTotalEnergyCostLocalMap = new HashMap<>();
 
     public static Singleton singleton; //Holds none changeable and needed variables by other classes such as project
 
@@ -253,7 +250,7 @@ public class DroidEC extends AnAction {
                 }else {
 
                     //Extract Android API calls from the method body
-                    retrieveAPICallsInMethod(methodBody);
+                    retrieveAPICallsInMethod(className, methodName, methodBody);
 
                     //Generate the method start log statement
                     String startLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodName + "," + className + "," + MethodStart_TAG + ")\");";
@@ -275,7 +272,8 @@ public class DroidEC extends AnAction {
         }
     }
 
-    public static void retrieveAPICallsInMethod(PsiCodeBlock methodBody) {
+    // Extract API calls and count them within the input method body
+    public void retrieveAPICallsInMethod(String methodClassName, String inputMethodName, PsiCodeBlock methodBody) {
         List<PsiMethodCallExpression> methodCalls = new ArrayList<>();
 
         methodCalls.addAll(PsiTreeUtil.collectElementsOfType(methodBody, PsiMethodCallExpression.class));
@@ -284,8 +282,43 @@ public class DroidEC extends AnAction {
             PsiReferenceExpression methodExpression = psiMethodCallExpression.getMethodExpression();
             String methodName = methodExpression.getReferenceName();  // Get the method name
             System.out.println("-----------Method call found: " + methodName);
+            if (methodsAPICallsCountLocalMap.isEmpty()){ // If this is true, it means that this is the first item we are putting in the Map, so easily add
+                // If the method call is red API call, it affects the energy consumption and should be logged
+                if (singleton.redAPICalls.keySet().contains(methodName)) {
+                    methodsAPICallsCountLocalMap.put(new ThreeStringKey(methodClassName,inputMethodName,methodName),1);
+                    methodsAPICallsTotalEnergyCostLocalMap.put(new TwoStringKey(methodClassName,inputMethodName),singleton.redAPICalls.get(methodName).doubleValue());
+                }
+            }else{
+                // If the method call is red API call, it affects the energy consumption and should be logged
+                if (singleton.redAPICalls.keySet().contains(methodName)) {
+
+                    ThreeStringKey key = new ThreeStringKey(methodClassName,inputMethodName,methodName);
+                    TwoStringKey twoStringKey = new TwoStringKey(methodClassName,inputMethodName);
+                    // The key is already exist
+                    if (methodsAPICallsCountLocalMap.containsKey(key)) {
+                        int oldValue = methodsAPICallsCountLocalMap.get(key);
+                        methodsAPICallsCountLocalMap.put(key,oldValue+1);
+
+                        double oldEnergyCost = methodsAPICallsTotalEnergyCostLocalMap.get(twoStringKey).doubleValue();
+                        methodsAPICallsTotalEnergyCostLocalMap.put(twoStringKey,oldEnergyCost+singleton.redAPICalls.get(methodName).doubleValue());
+                    }else {
+                        // First time to add the key
+                        methodsAPICallsCountLocalMap.put(key,1);
+                        methodsAPICallsTotalEnergyCostLocalMap.put(twoStringKey,singleton.redAPICalls.get(methodName).doubleValue());
+                    }
+                }
+            }
+
         }
 
+        // Copy the methodsAPICallsCountLocalMap to a Map in the singleton, so all the classes can access it
+        if (!methodsAPICallsCountLocalMap.isEmpty()) {
+            singleton.fillMethodsAPICallsCountMap(methodsAPICallsCountLocalMap);
+        }
+
+        if (!methodsAPICallsTotalEnergyCostLocalMap.isEmpty()) {
+            singleton.fillMethodsAPICallsEnergyMap(methodsAPICallsTotalEnergyCostLocalMap);
+        }
     }
 
 //    // This method annotates methods - WORKING

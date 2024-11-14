@@ -1,5 +1,8 @@
 package com.github.lylanv.secdroid.inspections;
 
+import com.github.lylanv.secdroid.utils.ThreeStringKey;
+import com.github.lylanv.secdroid.utils.TwoStringKey;
+
 import java.util.Map;
 import java.util.HashMap;
 
@@ -9,6 +12,9 @@ public class Singleton {
     public static Map<String, Integer> jointRedAPICalls = new HashMap<>();
     public static Map<String, Integer> hwAPICalls = new HashMap<>();
     public static int NUMBER_OF_RED_APIS;
+
+    public static Map<ThreeStringKey, Integer> methodsAPICallsCountMap = new HashMap<>();
+    public static Map<TwoStringKey, Double> methodsAPICallsTotalEnergyCostMap = new HashMap<>();
 
 //    public Singleton(final Project project) {
 //        setAPICallsMap();
@@ -22,10 +28,10 @@ public class Singleton {
     }
 
     // This function adds the API calls to ReadAPICalls set
-    private void setAPICallsMap() {
+    public static void setAPICallsMap() {
         //TODO: you have some the same method expression such as query, updated, addView, findViewById, setText and show
         // consider to do something with them. Their energy consumption could be different
-        redAPICalls.clear();
+        //redAPICalls.clear();
 
         //Activity and Context
         redAPICalls.put("performClick",1); // android.view.View.performClick() & android.widget.CompoundButton.performClick()
@@ -232,6 +238,13 @@ public class Singleton {
         NUMBER_OF_RED_APIS = redAPICalls.size();
     }
 
+    public void fillMethodsAPICallsCountMap(Map<ThreeStringKey, Integer> methodsAPICallsCountMap) {
+        this.methodsAPICallsCountMap = methodsAPICallsCountMap;
+    }
+
+    public void fillMethodsAPICallsEnergyMap(Map<TwoStringKey, Double> methodsAPICallsTotalEnergyCostMap) {
+        this.methodsAPICallsTotalEnergyCostMap = methodsAPICallsTotalEnergyCostMap;
+    }
 
     private void setJointAPICallsMap(){
         jointRedAPICalls.clear();

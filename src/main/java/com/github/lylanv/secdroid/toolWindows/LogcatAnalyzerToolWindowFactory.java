@@ -29,6 +29,7 @@ public class LogcatAnalyzerToolWindowFactory implements ToolWindowFactory {
 
     private static JTextArea textArea;
     private static JTable table;
+    private static CustomTableModel tableModel;
     private static DefaultCategoryDataset barChartDataset;
     private static TimeSeries lineGraphSeries;
 
@@ -77,14 +78,30 @@ public class LogcatAnalyzerToolWindowFactory implements ToolWindowFactory {
     }
 
     private JComponent createTableComponent() {
-        String[] columns = {"No.", "Method Name", "Energy Usage"};
-        String[][] data = {
-                {"Row1-Col1", "Row1-Col2", "Row1-Col3"},
-                {"Row2-Col1", "Row2-Col2", "Row2-Col3"},
-                {"Row3-Col1", "Row3-Col2", "Row3-Col3"},
-        };
+//        String[] columns = {"Class Name", "Method Name", "Energy Consumption"};
+//        String[][] data = {
+//                {"Row1-Col1", "Row1-Col2", "Row1-Col3"},
+//                {"Row2-Col1", "Row2-Col2", "Row2-Col3"},
+//                {"Row3-Col1", "Row3-Col2", "Row3-Col3"},
+//        };
+//
+//        table = new JTable(data, columns);
+//
+//        JScrollPane tableScrollPane = new JBScrollPane(table);
+//
+//        return tableScrollPane;
 
-        table = new JTable(data, columns);
+        // Define column names
+        Object[] columnNames = {"Class Name", "Method Name", "Energy Consumption"};
+
+        // Initialize the custom table model with column names
+        tableModel = new CustomTableModel(columnNames);
+
+        // Initialize the JTable with the custom model
+        table = new JTable(tableModel);
+
+//        // Return the table component, wrapped in a scroll pane if needed
+//        return new JScrollPane(table);
 
         JScrollPane tableScrollPane = new JBScrollPane(table);
 
@@ -135,10 +152,14 @@ public class LogcatAnalyzerToolWindowFactory implements ToolWindowFactory {
         textArea.append(newText);
     }
 
-    public static void updateTable(String[][] newData) {
-        table.setModel(new javax.swing.table.DefaultTableModel(newData, new String[]{"Column 1", "Column 2", "Column 3"}));
-    }
+//    public static void updateTable(String[][] newData) {
+//        table.setModel(new javax.swing.table.DefaultTableModel(newData, new String[]{"Column 1", "Column 2", "Column 3"}));
+//    }
 
+    // Method to add or update a row in the table
+    public static void addOrUpdateTableRow(Object key1, Object key2, Object[] rowData) {
+        tableModel.addOrUpdateRow(key1, key2, rowData);
+    }
 
     public static void updateBarChart(Number value, String rowKey, String columnKey) {
         barChartDataset.setValue(value, rowKey, columnKey);
@@ -155,7 +176,9 @@ public class LogcatAnalyzerToolWindowFactory implements ToolWindowFactory {
         textArea.setText("");
 
         //TODO: check the table clearance!
-        table.setModel(new javax.swing.table.DefaultTableModel(new Object[][]{}, new String[]{"Column 1", "Column 2", "Column 3"}));
+        //table.setModel(new javax.swing.table.DefaultTableModel(new Object[][]{}, new String[]{"Column 1", "Column 2", "Column 3"}));
+        tableModel.clear();
+
         barChartDataset.clear();
         lineGraphSeries.clear();
     }
