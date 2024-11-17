@@ -1,6 +1,9 @@
 package com.github.lylanv.secdroid.toolWindows;
 
+import com.android.tools.r8.internal.Sy;
 import com.github.lylanv.secdroid.inspections.EventBusManager;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowFactory;
@@ -8,6 +11,7 @@ import com.intellij.openapi.wm.ex.ToolWindowManagerListener;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.content.ContentFactory;
 import com.intellij.util.messages.MessageBusConnection;
+//import kotlin.reflect.jvm.internal.calls.CallerImpl;
 import org.jetbrains.annotations.NotNull;
 import org.jfree.chart.ChartFactory;
 import org.jfree.chart.ChartPanel;
@@ -17,15 +21,23 @@ import org.jfree.data.category.DefaultCategoryDataset;
 import org.jfree.data.time.Second;
 import org.jfree.data.time.TimeSeries;
 import org.jfree.data.time.TimeSeriesCollection;
+import org.jfree.data.time.TimeSeriesDataItem;
+
 
 import javax.swing.*;
 import java.awt.*;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 
 public class LogcatAnalyzerToolWindowFactory implements ToolWindowFactory {
 
+    private Project project;
+
     private Thread logcatAnalyzerThread;
     private LogCatReader logcatReader;
-
 
     private static JTextArea textArea;
     private static JTable table;
@@ -33,10 +45,15 @@ public class LogcatAnalyzerToolWindowFactory implements ToolWindowFactory {
     private static DefaultCategoryDataset barChartDataset;
     private static TimeSeries lineGraphSeries;
 
+    private static String resultPath;
+
     @Override
     public void createToolWindowContent(@NotNull Project project, @NotNull ToolWindow toolWindow) {
-        JTabbedPane tabbedPane = new JTabbedPane();
 
+        this.project = project;
+        resultPath = project.getBasePath();
+
+        JTabbedPane tabbedPane = new JTabbedPane();
 
         // Adding components in separate tabs
         tabbedPane.addTab("Text", createTextComponent());
@@ -171,6 +188,78 @@ public class LogcatAnalyzerToolWindowFactory implements ToolWindowFactory {
         lineGraphSeries.addOrUpdate(new Second(), yValue.doubleValue());  // X-axis is time; only Y value changes
     }
 
+    public static void saveResultsToFile(){
+
+        if (resultPath != null) {
+            resultPath = resultPath + "/SECSDroid_Result.json";
+
+            // Create a map to store all data
+            HashMap<String, Object> data = new HashMap<>();
+
+            // Save table data
+            ArrayList<Object> tableData = new ArrayList<>();
+            for (int i = 0; i < tableModel.getRowCount(); i++) {
+                Object[] row = new Object[tableModel.getColumnCount()];
+                for (int j = 0; j < tableModel.getColumnCount(); j++) {
+                    row[j] = tableModel.getValueAt(i, j);
+                }
+                tableData.add(Arrays.toString(row));
+            }
+            data.put("table", tableData);
+
+            // Save bar chart data
+            ArrayList<Object> barChartData = new ArrayList<>();
+            for (int i = 0; i < barChartDataset.getRowCount(); i++) {
+                for (int j = 0; j < barChartDataset.getColumnCount(); j++) {
+                    HashMap<String, Object> entry = new HashMap<>();
+                    if (barChartDataset.getRowKey(i) != null && barChartDataset.getColumnKey(j) != null && barChartDataset.getValue(i,j) != null) {
+                        entry.put("rowKey", barChartDataset.getRowKey(i).toString());
+                        entry.put("columnKey", barChartDataset.getColumnKey(j).toString());
+                        entry.put("value", barChartDataset.getValue(i, j));
+                        barChartData.add(entry);
+                    }
+
+//                    entry.put("rowKey", barChartDataset.getRowKey(i).toString());
+//                    entry.put("columnKey", barChartDataset.getColumnKey(j).toString());
+//                    entry.put("value", barChartDataset.getValue(i, j));
+//                    barChartData.add(entry);
+                }
+            }
+            data.put("barChart", barChartData);
+
+            // Save text area content
+            data.put("text", textArea.getText());
+
+            // Save line graph data
+            ArrayList<Object> lineGraphData = new ArrayList<>();
+            lineGraphSeries.getItems().forEach(item -> {
+                HashMap<String, Object> point = new HashMap<>();
+                if (item instanceof TimeSeriesDataItem) {
+                    TimeSeriesDataItem dataItem = (TimeSeriesDataItem) item;
+                    point.put("time",dataItem.getPeriod().getStart());
+                    point.put("value",dataItem.getValue());
+                    lineGraphData.add(point);
+                }else {
+                    System.out.println("[GreenMeter -> LogcatAnalyzerToolWindowFactory -> saveResultsToFile$ Can't save the table point to the result file! Unexpected item type: " + item.getClass().getName());
+                    //point.put("value",item.toString());
+                }
+            });
+            data.put("lineGraph", lineGraphData);
+
+            // Write data to JSON file
+            Gson gson = new GsonBuilder().setPrettyPrinting().create();
+            try (FileWriter writer = new FileWriter(resultPath)) {
+                gson.toJson(data, writer);
+            } catch (IOException e) {
+                System.out.println("[GreenMeter -> LogcatAnalyzerToolWindowFactory -> saveResultsToFile$ FATAL ERROR: Can't save results to the file. IOException occurred: !]" + e.getMessage());
+                e.printStackTrace();
+            }
+        } else {
+            System.out.println("[GreenMeter -> LogcatAnalyzerToolWindowFactory -> saveResultsToFile$ FATAL ERROR: Can't save results to the file. The file path is null!]");
+        }
+
+    }
+
     public static void clearAllComponents(){
 
         textArea.setText("");
@@ -182,4 +271,13 @@ public class LogcatAnalyzerToolWindowFactory implements ToolWindowFactory {
         barChartDataset.clear();
         lineGraphSeries.clear();
     }
+
+
+//    //For testing
+//    public static void typeChecker(){
+//            lineGraphSeries.getItems().forEach(item -> {
+//                System.out.println("**********************************************************************************************************************");
+//                System.out.println("Unexpected item type: " + item.getClass().getName());
+//            });
+//    }
 }

@@ -1,5 +1,6 @@
 package com.github.lylanv.secdroid.toolWindows;
 
+import com.android.tools.r8.L;
 import com.github.lylanv.secdroid.events.ApplicationStoppedEvent;
 import com.github.lylanv.secdroid.events.BuildSuccessEvent;
 
@@ -318,6 +319,9 @@ public class LogCatReader implements Runnable {
     //Cancel timer and clear the variables, LogCat file, and all components in the tool window
     public void stop() throws IOException {
         running = false;
+
+        LogcatAnalyzerToolWindowFactory.saveResultsToFile();
+
         AdbUtils.clearLogCatFile();
 
         redAPIsCount.clear();
