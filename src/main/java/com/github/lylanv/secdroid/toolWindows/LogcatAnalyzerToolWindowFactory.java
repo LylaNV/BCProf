@@ -1,17 +1,36 @@
 package com.github.lylanv.secdroid.toolWindows;
 
+import com.android.builder.model.v2.AndroidModel;
+import com.android.tools.idea.gradle.project.model.GradleAndroidModel;
+import com.android.tools.idea.gradle.project.sync.AndroidModule;
+import com.android.tools.idea.model.MergedManifestManager;
+import com.android.tools.idea.projectsystem.ProjectSystemUtil;
+import com.android.tools.idea.projectsystem.SourceProviders;
 import com.android.tools.r8.internal.Sy;
 import com.github.lylanv.secdroid.inspections.EventBusManager;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.intellij.ide.highlighter.JavaFileType;
+import com.intellij.openapi.module.ModuleManager;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.roots.ModuleRootManager;
+import com.intellij.openapi.roots.ProjectFileIndex;
+import com.intellij.openapi.roots.ProjectRootManager;
+import com.intellij.openapi.ui.Messages;
+import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowFactory;
 import com.intellij.openapi.wm.ex.ToolWindowManagerListener;
+import com.intellij.psi.*;
+import com.intellij.psi.search.FileTypeIndex;
+import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.content.ContentFactory;
 import com.intellij.util.messages.MessageBusConnection;
+import com.intellij.openapi.module.Module;
+import com.intellij.openapi.module.ModuleManager;
 //import kotlin.reflect.jvm.internal.calls.CallerImpl;
+import org.jetbrains.android.facet.AndroidFacet;
 import org.jetbrains.annotations.NotNull;
 import org.jfree.chart.ChartFactory;
 import org.jfree.chart.ChartPanel;
@@ -30,11 +49,13 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
+
 
 public class LogcatAnalyzerToolWindowFactory implements ToolWindowFactory {
 
-    private Project project;
+    private static Project project;
 
     private Thread logcatAnalyzerThread;
     private LogCatReader logcatReader;
@@ -46,6 +67,8 @@ public class LogcatAnalyzerToolWindowFactory implements ToolWindowFactory {
     private static TimeSeries lineGraphSeries;
 
     private static String resultPath;
+
+    private static String packageName;
 
     @Override
     public void createToolWindowContent(@NotNull Project project, @NotNull ToolWindow toolWindow) {
@@ -85,8 +108,33 @@ public class LogcatAnalyzerToolWindowFactory implements ToolWindowFactory {
         });
     }
 
+//    private static String extractPackageNameFromManifest(String manifestContent) {
+//        // Use regex or XML parsing to extract the package name
+//        String regex = "package\\s*=\\s*\"([^\"]+)\"";
+//        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile(regex).matcher(manifestContent);
+//        if (matcher.find()) {
+//            return matcher.group(1); // Return the captured package name
+//        }
+//        return null;
+//    }
+//
+//    public static String getPackageNameFromMergedManifest(Module module) {
+//        try {
+//            // Fetch the package name from the merged manifest
+//            return MergedManifestManager.getMergedManifest(module).get().getPackage();
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//            return null; // Handle cases where the manifest or module is invalid
+//        }
+//    }
+
     private JComponent createTextComponent() {
-        textArea = new JTextArea("This is an example text component inside the tool window.");
+        if (packageName == null) {
+            textArea = new JTextArea("This is an example text component inside the tool window.");
+        }else{
+            textArea = new JTextArea("Package is: " + packageName);
+        }
+
         textArea.setLineWrap(true);
 
         JScrollPane textScrollPane = new JBScrollPane(textArea);
@@ -272,6 +320,30 @@ public class LogcatAnalyzerToolWindowFactory implements ToolWindowFactory {
         lineGraphSeries.clear();
     }
 
+
+    public static String getPackageName(){
+
+        if (packageName == null) {
+            System.out.println("[GreenMeter -> LogcatAnalyzerToolWindowFactory -> getPackageName$ Package name can not be retrieved because project is null!");
+            showSystemUsageDialog("The project package name can not be retrieved because project is null! Please first click SECDroid button!");
+        }
+
+        for (Module module : ModuleManager.getInstance(project).getModules()) {
+            GradleAndroidModel androidModel = GradleAndroidModel.get(module);
+            if (androidModel != null) {
+                String applicationId = androidModel.getApplicationId();
+                //System.out.println("Application ID: " + applicationId);
+                packageName = applicationId;
+                return packageName;
+            }
+        }
+        return null;
+    }
+
+
+    public static void showSystemUsageDialog(String message) {
+        Messages.showMessageDialog(message, "SECDroid Message", Messages.getInformationIcon());
+    }
 
 //    //For testing
 //    public static void typeChecker(){

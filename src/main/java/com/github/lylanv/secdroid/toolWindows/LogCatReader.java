@@ -1,6 +1,9 @@
 package com.github.lylanv.secdroid.toolWindows;
 
 import com.android.tools.r8.L;
+import com.android.tools.r8.M;
+import com.android.tools.r8.internal.Sy;
+import com.github.lylanv.secdroid.events.ApplicationStartedEvent;
 import com.github.lylanv.secdroid.events.ApplicationStoppedEvent;
 import com.github.lylanv.secdroid.events.BuildSuccessEvent;
 
@@ -33,9 +36,14 @@ public class LogCatReader implements Runnable {
 
     private Timer timer;
 
+    private Map<String,Integer[]> networkInitialUsageMap = new HashMap<>();
+    private Map<String,Integer[]> networkCurrentUsageMap = new HashMap<>();
+    String applicationPackageName;
+
 
     public LogCatReader() {
         this.timer = new Timer();
+        applicationPackageName = LogcatAnalyzerToolWindowFactory.getPackageName();
         updateLineGraph(); // I called it here to have it as an ongoing continuous graph
     }
 
@@ -54,6 +62,17 @@ public class LogCatReader implements Runnable {
             stop();
 
 //            analyzeLogCatForMethodStatistics();
+        }
+    }
+
+    @Subscribe
+    public void handleApplicationStartEvent(ApplicationStartedEvent event) throws IOException {
+        if (event.getApplicationStarted()){
+            while (applicationPackageName == null){
+                applicationPackageName = LogcatAnalyzerToolWindowFactory.getPackageName();
+            }
+            //HW
+            monitoringDeviceHW();
         }
     }
 
@@ -278,6 +297,55 @@ public class LogCatReader implements Runnable {
         }
     }
 
+    private void monitoringDeviceHW() {
+
+        //check network
+        networkInitialUsageMap = checkNetwork(applicationPackageName);
+
+        AdbUtils.isScreenOn();
+
+        AdbUtils.isCameraOn();
+
+        AdbUtils.isAppCurrentFocusOFScreen(applicationPackageName);
+
+
+    }
+
+    private Map<String, Integer[]> checkNetwork(String applicationPackageName) {
+
+        String connectedInterface =  AdbUtils.isNetworkConnected();
+        if (connectedInterface != null) {
+            if (!connectedInterface.contains("Idle timers")) {
+                boolean networkConnectionEstablished = AdbUtils.isNetworkConnectionEstablished();
+
+                if (networkConnectionEstablished) {
+                    System.out.println("[LogCatReader -> checkNetwork$ There is an active/established network connection.");
+                    if (AdbUtils.isPackageUsingNetwork(applicationPackageName)) {
+                        System.out.println("[LogCatReader -> checkNetwork$ There is an active/established network connection for this application.");
+                        if (AdbUtils.numberOfPackets() != null) {
+                            System.out.println("[ALogCatReader -> checkNetwork$ Returning number of packets.");
+                            return AdbUtils.numberOfPackets();
+                        }else {
+                            System.out.println("[LogCatReader -> checkNetwork$ Problem in extracting number of packets for this application.");
+                        }
+                    }
+
+
+                }else {
+                    System.out.println("[LogCatReader -> checkNetwork$ No active/established network connection.");
+                }
+
+            }else{
+                System.out.println("[LogCatReader -> checkNetwork$ No active network interface.");
+            }
+
+        } else {
+            System.out.println("[LogCatReader -> checkNetwork$ Failed to check network connection.");
+        }
+
+        return null;
+    }
+
     //Gets API/method call name from the logged line
     private String getAPICallName(String line) {
         // finds the index of the open parentheses signe ("(") in the logged line
@@ -337,7 +405,64 @@ public class LogCatReader implements Runnable {
         timer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
+
+                if (running) {
+
+                }
+
+                AdbUtils.isScreenOn();
+
                 if (batteryLevel > 0 ) {
+                    //TEST HW CAMERA
+                    AdbUtils.isCameraOn();
+
+                    //TEST HW APP Display focus
+                    AdbUtils.isAppCurrentFocusOFScreen(applicationPackageName);
+
+                    //TEST HW GPS
+                    AdbUtils.isUsingGPS(applicationPackageName);
+
+
+                    //HW -Network
+                    networkCurrentUsageMap = checkNetwork(applicationPackageName);
+                    //current and initial network info available -> check if updating energy is needed
+                    if (networkCurrentUsageMap !=null && networkInitialUsageMap != null) {
+                        for (Map.Entry<String,Integer[]> entryCurrent: networkCurrentUsageMap.entrySet()) {
+                            for (Map.Entry<String,Integer[]> entryInitial: networkInitialUsageMap.entrySet()){
+                                if (entryCurrent.getKey() == entryInitial.getKey()) {
+                                    if (entryCurrent.getValue()[0] - entryInitial.getValue()[0] > 0 && entryCurrent.getValue()[1] - entryInitial.getValue()[1] > 0) {
+                                        //TODO: calculation of battery consumption
+                                        //Application is using network calculate based on the power
+                                        //wlan0 -> WiFi
+                                        //eth0 -> cellular data
+                                        Integer[] newValues = entryCurrent.getValue();
+                                        Integer[] oldValues = entryInitial.getValue();
+
+                                    /* Replacing map value
+                                    public V replace(K key, V newValue)
+                                    public boolean replace(K key, V oldValue, V newValue)*/
+
+                                        networkInitialUsageMap.replace(entryCurrent.getKey(), newValues);
+                                    }
+                                }
+                            }
+                        }
+                    } else if (networkCurrentUsageMap !=null && networkInitialUsageMap == null) {
+                        //current info available and initial is null -> network is connected and established recently -> update the initial map -> no need to update energy
+                        for (Map.Entry<String,Integer[]> entryCurrent: networkCurrentUsageMap.entrySet()) {
+                            networkInitialUsageMap.put(entryCurrent.getKey(), entryCurrent.getValue());
+                        }
+                    }
+
+
+                    //HW -GPS
+                    boolean gpsInUse = AdbUtils.isUsingGPS(applicationPackageName);
+                    if (gpsInUse) {
+                        //TODO:calculation of battery consumption
+                    }
+
+
+
                     LogcatAnalyzerToolWindowFactory.updateLineGraph(batteryLevel);
                 }
             }
