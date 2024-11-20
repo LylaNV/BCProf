@@ -32,7 +32,7 @@ public class LogCatReader implements Runnable {
 
     private volatile boolean running = true; // Volatile to ensure visibility across threads
 
-    private volatile boolean updatingFlag = false;
+    private volatile boolean updatingFlag = false; //to avoid getting error when exporting the output if client/user forgot to first click the SECDroid, also helping to control the multiple application runs and updating the tool window
 
     Map<String, Integer> redAPIsCount = new HashMap<>(); // Holds the name of APIs and their counts
 
@@ -43,8 +43,20 @@ public class LogCatReader implements Runnable {
 
     private Timer timer;
 
+    //HW components variables
     private Map<String,Integer[]> networkInitialUsageMap = new HashMap<>();
     private Map<String,Integer[]> networkCurrentUsageMap = new HashMap<>();
+
+    private boolean gpsStatus_initial = false;
+    private boolean gpsStatus_current = false;
+
+    private boolean displayStatus_initial = false;
+    private boolean displayStatus_current = false;
+
+    private boolean cameraStatus_initial = false;
+    private boolean cameraStatus_current = false;
+
+
     String applicationPackageName;
 
     private boolean isOutputReady = false;
@@ -68,6 +80,11 @@ public class LogCatReader implements Runnable {
     public void handleBuildSuccessEvent(BuildSuccessEvent event) throws IOException {
         if (event.getBuildStatus()){
             System.out.println("[LogCatReader -> handleBuildSuccessEvent$ Build successful");
+            while (applicationPackageName == null){
+                applicationPackageName = LogcatAnalyzerToolWindowFactory.getPackageName();
+            }
+
+            System.out.println("[LogCatReader -> handleBuildSuccessEvent$ Build successful - application package name: " + applicationPackageName);
         }
     }
 
@@ -83,9 +100,9 @@ public class LogCatReader implements Runnable {
     @Subscribe
     public void handleApplicationStartEvent(ApplicationStartedEvent event) throws IOException {
         if (event.getApplicationStarted()){
-            while (applicationPackageName == null){
-                applicationPackageName = LogcatAnalyzerToolWindowFactory.getPackageName();
-            }
+//            while (applicationPackageName == null){
+//                applicationPackageName = LogcatAnalyzerToolWindowFactory.getPackageName();
+//            }
         }
     }
 
@@ -175,6 +192,16 @@ public class LogCatReader implements Runnable {
                 if(batteryLevel == -1){
                     System.out.println("[GreenEdge -> LogCatReader$ FATAL ERROR: Battery level is negative.");
                 }
+
+                if (applicationPackageName == null){
+                    System.out.println("[GreenEdge -> LogCatReader$ FATAL ERROR: Cannot get initial status of hardware components! Application package name is null.");
+                }else {
+
+                    //monitorInitialStatusOfHW(applicationPackageName);
+                    monitoringInitialStatusOfNetwork();
+
+                }
+
             }
 
 
@@ -188,7 +215,7 @@ public class LogCatReader implements Runnable {
                 if (Singleton.redAPICalls == null){
                     showSystemUsageDialog("Please first click the SECDroid button then run the application!");
 
-                    isOutputReady = false;
+                    //isOutputReady = false;
                     updatingFlag = false;
 
                     //AdbUtils.stopEmulator();
@@ -197,13 +224,13 @@ public class LogCatReader implements Runnable {
                 }else if (Singleton.redAPICalls.isEmpty()){
                     showSystemUsageDialog("Please first click the SECDroid button then run the application!");
 
-                    isOutputReady = false;
+                    //isOutputReady = false;
                     updatingFlag = false;
 
                     //AdbUtils.stopEmulator();
                     //stopWithoutSaving();
                 }else {
-                    isOutputReady = true;
+                    //isOutputReady = true;
                     updatingFlag = true;
                 }
 
@@ -316,6 +343,7 @@ public class LogCatReader implements Runnable {
         }
     }
 
+
     //Cancel timer and clear the variables, LogCat file, and all components in the tool window
     public void stop() {
         running = false;
@@ -347,19 +375,38 @@ public class LogCatReader implements Runnable {
      * ********************************************************************************************************
      * */
 
-    private void monitoringDeviceHW() {
+    private void monitoringInitialStatusOfNetwork() {
 
         //check network
         networkInitialUsageMap = checkNetwork(applicationPackageName);
 
-        AdbUtils.isScreenOn();
-
-        AdbUtils.isCameraOn();
-
-        AdbUtils.isAppCurrentFocusOFScreen(applicationPackageName);
-
-
     }
+
+    private void monitorInitialStatusOfHW(String applicationPackageName) {
+        networkInitialUsageMap = checkNetwork(applicationPackageName);
+        gpsStatus_initial = AdbUtils.isUsingGPS(applicationPackageName);
+        displayStatus_initial = AdbUtils.isAppCurrentFocusOFScreen(applicationPackageName);
+        cameraStatus_initial = AdbUtils.isCameraOn();
+
+        //TEST
+        System.out.println("[GreenEdge -> LogCatReader$ gpsStatus_initial " + gpsStatus_initial);
+        System.out.println("[GreenEdge -> LogCatReader$ displayStatus_initial " + displayStatus_initial);
+        System.out.println("[GreenEdge -> LogCatReader$ cameraStatus_initial" + cameraStatus_initial);
+    }
+
+    private void monitorCurrentStatusOfHW(String applicationPackageName) {
+        networkCurrentUsageMap = checkNetwork(applicationPackageName);
+        gpsStatus_current = AdbUtils.isUsingGPS(applicationPackageName);
+        displayStatus_current = AdbUtils.isAppCurrentFocusOFScreen(applicationPackageName);
+        cameraStatus_current = AdbUtils.isCameraOn();
+
+        //TEST
+        System.out.println("[GreenEdge -> LogCatReader$ gpsStatus_current " + gpsStatus_current);
+        System.out.println("[GreenEdge -> LogCatReader$ displayStatus_current " + displayStatus_current);
+        System.out.println("[GreenEdge -> LogCatReader$ cameraStatus_current" + cameraStatus_current);
+    }
+
+
 
     private Map<String, Integer[]> checkNetwork(String applicationPackageName) {
 
@@ -409,17 +456,24 @@ public class LogCatReader implements Runnable {
                         applicationPackageName = LogcatAnalyzerToolWindowFactory.getPackageName();
                     }
 
-                    AdbUtils.isScreenOn();
 
                     if (batteryLevel > 0 ) {
-                        //TEST HW CAMERA
-                        AdbUtils.isCameraOn();
 
-                        //TEST HW APP Display focus
-                        AdbUtils.isAppCurrentFocusOFScreen(applicationPackageName);
+                        if (AdbUtils.isCameraOn()){
+                            //TODO calculate the battery consumption
+                            batteryLevel--;
+                            System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$ CAMERA -> batteryLevel " + batteryLevel);
+                        }
 
-                        //TEST HW GPS
-                        AdbUtils.isUsingGPS(applicationPackageName);
+
+                        if (AdbUtils.isAppCurrentFocusOFScreen(applicationPackageName)){
+                            batteryLevel--;
+                            System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$ Screen -> batteryLevel " + batteryLevel);
+                        }
+
+                        if (AdbUtils.isUsingGPS(applicationPackageName)){
+                            batteryLevel--;
+                        }
 
 
                         //HW -Network
@@ -437,10 +491,9 @@ public class LogCatReader implements Runnable {
                                             Integer[] newValues = entryCurrent.getValue();
                                             Integer[] oldValues = entryInitial.getValue();
 
-                                    /* Replacing map value
-                                    public V replace(K key, V newValue)
-                                    public boolean replace(K key, V oldValue, V newValue)*/
-
+                                            /* Replacing map value
+                                            public V replace(K key, V newValue)
+                                            public boolean replace(K key, V oldValue, V newValue)*/
                                             networkInitialUsageMap.replace(entryCurrent.getKey(), newValues);
                                         }
                                     }
@@ -451,13 +504,6 @@ public class LogCatReader implements Runnable {
                             for (Map.Entry<String,Integer[]> entryCurrent: networkCurrentUsageMap.entrySet()) {
                                 networkInitialUsageMap.put(entryCurrent.getKey(), entryCurrent.getValue());
                             }
-                        }
-
-
-                        //HW -GPS
-                        boolean gpsInUse = AdbUtils.isUsingGPS(applicationPackageName);
-                        if (gpsInUse) {
-                            //TODO:calculation of battery consumption
                         }
 
 
