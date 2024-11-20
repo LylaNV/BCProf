@@ -166,6 +166,39 @@ public class AdbUtils {
     }
 
 
+    public static Boolean isApplicationRunning(String appPackageName) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(adbPath, "shell", "ps", "|", "grep", appPackageName );
+            Process pbProcess = pb.start();
+
+            if (pbProcess != null) {
+                BufferedReader reader = new BufferedReader(new InputStreamReader(pbProcess.getInputStream()));
+
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (line.contains(appPackageName)) {
+                        //FOR TEST
+                        System.out.println("[AdbUtils -> isApplicationRunning$ Application is running!");
+                        return true;
+                    }
+                }
+
+                //FOR TEST
+                System.out.println("[AdbUtils -> isApplicationRunning$ Application is not running yet!");
+                reader.close();
+                return false;
+            } else {
+                System.out.println("[AdbUtils -> isApplicationRunning$ FATAL ERROR: Failed to get application runtime status process!");
+                return false;
+            }
+        } catch (Exception e){
+            e.printStackTrace();
+            System.out.println("[AdbUtils -> isApplicationRunning$ FATAL ERROR: I/O Exception -> Failed to get application runtime status!");
+            return false;
+        }
+    }
+
+
 
     /* ****************************************************************************************************************
      * ************************************* HW. COMPONENTS COMMANDS **************************************************
@@ -247,16 +280,16 @@ public class AdbUtils {
                 while ((line = reader.readLine()) != null) {
                     if(networkFound){
                         if (line.contains("eth0")) {//Cellular data
-                            System.out.println("[AdbUtils -> isNetworkAvailable$ eth0");
+                            //System.out.println("[AdbUtils -> isNetworkAvailable$ eth0");
                             networkFound = false;
                             return "eth0";
                         }else if (line.contains("wlan0")) { //WiFi
-                            System.out.println("[AdbUtils -> isNetworkAvailable$ wlan0");
+                            //System.out.println("[AdbUtils -> isNetworkAvailable$ wlan0");
                             networkFound = false;
                             return "wlan0";
                         }else{
                             networkFound = false;
-                            System.out.println("[AdbUtils -> isNetworkAvailable$ unknown");
+                            //System.out.println("[AdbUtils -> isNetworkAvailable$ unknown");
                             return line; //Unknown
                         }
                     }

@@ -47,6 +47,8 @@ import javax.swing.*;
 import java.awt.*;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -57,8 +59,8 @@ public class LogcatAnalyzerToolWindowFactory implements ToolWindowFactory {
 
     private static Project project;
 
-    private Thread logcatAnalyzerThread;
-    private LogCatReader logcatReader;
+    private static Thread logcatAnalyzerThread;
+    private static LogCatReader logcatReader;
 
     private static JTextArea textArea;
     private static JTable table;
@@ -66,15 +68,19 @@ public class LogcatAnalyzerToolWindowFactory implements ToolWindowFactory {
     private static DefaultCategoryDataset barChartDataset;
     private static TimeSeries lineGraphSeries;
 
-    private static String resultPath;
+    private static String resultPathBase;
 
     private static String packageName;
+
+
+    public static volatile boolean flagLogcatReaderRunning = false;
 
     @Override
     public void createToolWindowContent(@NotNull Project project, @NotNull ToolWindow toolWindow) {
 
         this.project = project;
-        resultPath = project.getBasePath();
+
+        resultPathBase = project.getBasePath();
 
         JTabbedPane tabbedPane = new JTabbedPane();
 
@@ -86,26 +92,26 @@ public class LogcatAnalyzerToolWindowFactory implements ToolWindowFactory {
 
         toolWindow.getContentManager().addContent(ContentFactory.getInstance().createContent(tabbedPane, "Energy Consumption Result", false));
 
-        // Create new thread to analyze the logcat file
-        logcatReader = new LogCatReader();
-        EventBusManager.register(logcatReader);
-        logcatAnalyzerThread = new Thread(logcatReader);
-        logcatAnalyzerThread.start();
+//        // Create new thread to analyze the logcat file
+//        logcatReader = new LogCatReader();
+//        EventBusManager.register(logcatReader);
+//        logcatAnalyzerThread = new Thread(logcatReader);
+//        logcatAnalyzerThread.start();
 
-        MessageBusConnection connection = project.getMessageBus().connect(project);
-        connection.subscribe(ToolWindowManagerListener.TOPIC, new ToolWindowManagerListener() {
-            @Override
-            public void toolWindowShown(ToolWindow window) {
-                if (window.getId().equals(toolWindow.getId())) {
-                    if (logcatAnalyzerThread == null || !logcatAnalyzerThread.isAlive()) {
-                        logcatReader = new LogCatReader();
-                        EventBusManager.register(logcatReader);
-                        logcatAnalyzerThread = new Thread(logcatReader);
-                        logcatAnalyzerThread.start();
-                    }
-                }
-            }
-        });
+//        MessageBusConnection connection = project.getMessageBus().connect(project);
+//        connection.subscribe(ToolWindowManagerListener.TOPIC, new ToolWindowManagerListener() {
+//            @Override
+//            public void toolWindowShown(ToolWindow window) {
+//                if (window.getId().equals(toolWindow.getId())) {
+//                    if (logcatAnalyzerThread == null || !logcatAnalyzerThread.isAlive()) {
+//                        logcatReader = new LogCatReader();
+//                        EventBusManager.register(logcatReader);
+//                        logcatAnalyzerThread = new Thread(logcatReader);
+//                        logcatAnalyzerThread.start();
+//                    }
+//                }
+//            }
+//        });
     }
 
 //    private static String extractPackageNameFromManifest(String manifestContent) {
@@ -238,8 +244,11 @@ public class LogcatAnalyzerToolWindowFactory implements ToolWindowFactory {
 
     public static void saveResultsToFile(){
 
-        if (resultPath != null) {
-            resultPath = resultPath + "/SECSDroid_Result.json";
+        if (resultPathBase != null) {
+            DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy.MM.dd.HH.mm.ss");
+            LocalDateTime now = LocalDateTime.now();
+
+            String resultPath = resultPathBase + "/SECSDroid_Result" + dtf.format(now) + ".json";
 
             // Create a map to store all data
             HashMap<String, Object> data = new HashMap<>();
@@ -312,7 +321,6 @@ public class LogcatAnalyzerToolWindowFactory implements ToolWindowFactory {
 
         textArea.setText("");
 
-        //TODO: check the table clearance!
         //table.setModel(new javax.swing.table.DefaultTableModel(new Object[][]{}, new String[]{"Column 1", "Column 2", "Column 3"}));
         tableModel.clear();
 
@@ -322,11 +330,6 @@ public class LogcatAnalyzerToolWindowFactory implements ToolWindowFactory {
 
 
     public static String getPackageName(){
-
-        if (packageName == null) {
-            System.out.println("[GreenMeter -> LogcatAnalyzerToolWindowFactory -> getPackageName$ Package name can not be retrieved because project is null!");
-            showSystemUsageDialog("The project package name can not be retrieved because project is null! Please first click SECDroid button!");
-        }
 
         for (Module module : ModuleManager.getInstance(project).getModules()) {
             GradleAndroidModel androidModel = GradleAndroidModel.get(module);
@@ -340,10 +343,55 @@ public class LogcatAnalyzerToolWindowFactory implements ToolWindowFactory {
         return null;
     }
 
+//    /* We have this function to refresh the toolwindow without needing to go to another
+//    * toolwindow and then come back to this one if we run and stop application multiple times
+//    * */
+    public static void refreshToolWindow() {
 
-    public static void showSystemUsageDialog(String message) {
-        Messages.showMessageDialog(message, "SECDroid Message", Messages.getInformationIcon());
+//        if (logcatAnalyzerThread !=null) {
+//            EventBusManager.unregister(logcatReader);
+//            logcatAnalyzerThread. interrupt();
+//            logcatAnalyzerThread = null;
+//            logcatReader = null;
+//
+//
+//            logcatReader.stop();
+//        }
+//
+
+//        if (!flagLogcatReaderRunning){
+//            if (logcatReader != null) {
+//                logcatReader = new LogCatReader();
+//                EventBusManager.register(logcatReader);
+//                logcatAnalyzerThread = new Thread(logcatReader);
+//                logcatAnalyzerThread.start();
+//
+//                flagLogcatReaderRunning = true;
+//            }else {
+//                EventBusManager.unregister(logcatReader);
+//                logcatAnalyzerThread.join();
+//
+//                logcatReader = new LogCatReader();
+//                EventBusManager.register(logcatReader);
+//                logcatAnalyzerThread = new Thread(logcatReader);
+//                logcatAnalyzerThread.start();
+//
+//                flagLogcatReaderRunning = true;
+//
+//
+//            }
+//        }
+
+
+        if (logcatAnalyzerThread == null || !logcatAnalyzerThread.isAlive()) {
+            logcatReader = new LogCatReader();
+            EventBusManager.register(logcatReader);
+            logcatAnalyzerThread = new Thread(logcatReader);
+            logcatAnalyzerThread.start();
+        }
+
     }
+
 
 //    //For testing
 //    public static void typeChecker(){

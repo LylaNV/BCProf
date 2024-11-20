@@ -3,6 +3,7 @@ package com.github.lylanv.secdroid.listeners;
 import com.github.lylanv.secdroid.events.ApplicationStartedEvent;
 import com.github.lylanv.secdroid.events.ApplicationStoppedEvent;
 import com.github.lylanv.secdroid.inspections.EventBusManager;
+import com.github.lylanv.secdroid.toolWindows.MyToolWindowUpdater;
 import com.intellij.execution.ExecutionListener;
 import com.intellij.execution.process.ProcessHandler;
 import com.intellij.execution.runners.ExecutionEnvironment;
@@ -15,6 +16,9 @@ public class AndroidProjectExecutionListener implements ExecutionListener{
         System.out.println("Process started");
         // Optional: Handle process start event if needed
         EventBusManager.post(new ApplicationStartedEvent(true));
+
+        //We call the refreshToolWindow method here because we need to see the data after application running
+        MyToolWindowUpdater.getInstance(env.getProject()).refreshToolWindow();
     }
 
     @Override

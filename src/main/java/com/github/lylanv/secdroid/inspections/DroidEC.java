@@ -1,9 +1,11 @@
 package com.github.lylanv.secdroid.inspections;
 
+import com.github.lylanv.secdroid.toolWindows.LogcatAnalyzerToolWindowFactory;
 import com.github.lylanv.secdroid.utils.ThreeStringKey;
 import com.github.lylanv.secdroid.utils.TwoStringKey;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
+import com.intellij.openapi.wm.ToolWindow;
 import org.jetbrains.annotations.NotNull;
 
 import com.intellij.ide.highlighter.JavaFileType;

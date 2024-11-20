@@ -17,16 +17,23 @@ import java.util.TimerTask;
 
 import com.github.lylanv.secdroid.inspections.AdbUtils;
 import com.github.lylanv.secdroid.inspections.DroidEC;
+import com.github.lylanv.secdroid.inspections.EventBusManager;
 import com.github.lylanv.secdroid.inspections.Singleton;
 import com.github.lylanv.secdroid.utils.TwoStringKey;
 import com.google.common.eventbus.Subscribe;
+import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.ui.Messages;
 
 public class LogCatReader implements Runnable {
 
     private final String TAG = "GreenMeter"; // Logging tag -> will be used to filter the logcat file
     private final String MethodStartTAG = "METHOD_START";
     private final String MethodEndTAG = "METHOD_END";
+
     private volatile boolean running = true; // Volatile to ensure visibility across threads
+
+    private volatile boolean updatingFlag = false;
+
     Map<String, Integer> redAPIsCount = new HashMap<>(); // Holds the name of APIs and their counts
 
     Map<TwoStringKey, Double> currentMethodEnergyUsageMap = new HashMap<>();
@@ -40,15 +47,25 @@ public class LogCatReader implements Runnable {
     private Map<String,Integer[]> networkCurrentUsageMap = new HashMap<>();
     String applicationPackageName;
 
+    private boolean isOutputReady = false;
+
 
     public LogCatReader() {
         this.timer = new Timer();
         applicationPackageName = LogcatAnalyzerToolWindowFactory.getPackageName();
+
         updateLineGraph(); // I called it here to have it as an ongoing continuous graph
     }
 
+
+    /*
+    * ********************************************************************************************************
+    *                                       EVENT HANDLERS
+    * ********************************************************************************************************
+    * */
+
     @Subscribe
-    public void handleBuildSuccessEvent(BuildSuccessEvent event) {
+    public void handleBuildSuccessEvent(BuildSuccessEvent event) throws IOException {
         if (event.getBuildStatus()){
             System.out.println("[LogCatReader -> handleBuildSuccessEvent$ Build successful");
         }
@@ -60,8 +77,6 @@ public class LogCatReader implements Runnable {
             System.out.println("[LogCatReader -> handleBuildSuccessEvent$ Application stopped");
 
             stop();
-
-//            analyzeLogCatForMethodStatistics();
         }
     }
 
@@ -71,8 +86,6 @@ public class LogCatReader implements Runnable {
             while (applicationPackageName == null){
                 applicationPackageName = LogcatAnalyzerToolWindowFactory.getPackageName();
             }
-            //HW
-            monitoringDeviceHW();
         }
     }
 
@@ -135,23 +148,6 @@ public class LogCatReader implements Runnable {
 //        }
 //    }
 
-    private String getFirstElementOfLogStatement(String line) {
-        String[] parts = line.split("[(),]");
-//        return parts[parts.length - 1];
-        return parts[1];
-    }
-
-    private String getSecondElementOfLogStatement(String line) {
-        String[] parts = line.split("[(),]");
-//        return parts[parts.length - 1];
-        return parts[2];
-    }
-
-    private String getThirdElementOfLogStatement(String line) {
-        String[] parts = line.split("[(),]");
-//        return parts[parts.length - 1];
-        return parts[3];
-    }
 
     @Override
     public void run() {
@@ -174,7 +170,6 @@ public class LogCatReader implements Runnable {
 
             if (AdbUtils.isEmulatorBooted()) {
                 System.out.println("[GreenEdge -> LogCatReader$ Emulator Booted]");
-
                 //Get battery level
                 batteryLevel = AdbUtils.getEmulatorBatteryLevel();
                 if(batteryLevel == -1){
@@ -188,6 +183,31 @@ public class LogCatReader implements Runnable {
 
             //Starts analyzing the LogCat file if it is not null
             if (logcatProcess != null) {
+
+                //Check if log statement are added
+                if (Singleton.redAPICalls == null){
+                    showSystemUsageDialog("Please first click the SECDroid button then run the application!");
+
+                    isOutputReady = false;
+                    updatingFlag = false;
+
+                    //AdbUtils.stopEmulator();
+                    //stopWithoutSaving();
+
+                }else if (Singleton.redAPICalls.isEmpty()){
+                    showSystemUsageDialog("Please first click the SECDroid button then run the application!");
+
+                    isOutputReady = false;
+                    updatingFlag = false;
+
+                    //AdbUtils.stopEmulator();
+                    //stopWithoutSaving();
+                }else {
+                    isOutputReady = true;
+                    updatingFlag = true;
+                }
+
+
                 System.out.println("[GreenEdge -> LogCatReader$ Reading the LogCat file...");
 
                 Map<TwoStringKey, Integer> numberOfRunningEachMethodMap = new HashMap<>();
@@ -195,7 +215,7 @@ public class LogCatReader implements Runnable {
                 BufferedReader logcatReader = new BufferedReader(new InputStreamReader(logcatProcess.getInputStream()));
 
                 String line;
-                while ((line = logcatReader.readLine()) != null && running) {
+                while ((line = logcatReader.readLine()) != null && running && updatingFlag) {
                     //Filters the lines of the LogCat file with our considered TAG which is GreenMeter
                     if (line.contains(TAG)) {
 
@@ -214,7 +234,6 @@ public class LogCatReader implements Runnable {
                              *  click the action button add log lines!!!
                              *  Consider to correct this!
                              * */
-
                             energyConsumption = batteryLevel - Singleton.redAPICalls.get(extractedAPICallName);
                             batteryLevel = energyConsumption;
 
@@ -287,15 +306,46 @@ public class LogCatReader implements Runnable {
                 System.out.println("[GreenEdge -> LogCatReader$ The LogCatReader is closed and destroyed!");
 
             }else {
-                System.out.println("[LogCatReader -> LogCatReader$ Failed to get emulator logcat file.");
+                System.out.println("[LogCatReader -> LogCatReader$ FATAL ERROR: Failed to get emulator logcat file process!.");
                 logcatProcess.destroy();
             }
 
         }catch (Exception e) {
-            System.out.println("[LogCatReader -> LogCatReader$ Failed to analyze the logcat file in Run() method.");
+            System.out.println("[LogCatReader -> LogCatReader$ FATAL ERROR: I/O Exception. Failed to analyze the logcat file in Run() method.");
             e.printStackTrace();
         }
     }
+
+    //Cancel timer and clear the variables, LogCat file, and all components in the tool window
+    public void stop() {
+        running = false;
+
+        if (updatingFlag) {
+            LogcatAnalyzerToolWindowFactory.saveResultsToFile();
+            LogcatAnalyzerToolWindowFactory.clearAllComponents();
+        }
+
+        AdbUtils.clearLogCatFile();
+
+        if (redAPIsCount != null) {
+            redAPIsCount.clear();
+        }
+
+        energyConsumption = 0;
+        batteryLevel = 0;
+
+        timer.cancel();
+
+        EventBusManager.unregister(this);
+
+    }
+
+
+    /*
+     * ********************************************************************************************************
+     *                                       HW COMPONENTS
+     * ********************************************************************************************************
+     * */
 
     private void monitoringDeviceHW() {
 
@@ -319,34 +369,145 @@ public class LogCatReader implements Runnable {
                 boolean networkConnectionEstablished = AdbUtils.isNetworkConnectionEstablished();
 
                 if (networkConnectionEstablished) {
-                    System.out.println("[LogCatReader -> checkNetwork$ There is an active/established network connection.");
+                    //System.out.println("[LogCatReader -> checkNetwork$ There is an active/established network connection.");
                     if (AdbUtils.isPackageUsingNetwork(applicationPackageName)) {
-                        System.out.println("[LogCatReader -> checkNetwork$ There is an active/established network connection for this application.");
+                        //System.out.println("[LogCatReader -> checkNetwork$ There is an active/established network connection for this application.");
                         if (AdbUtils.numberOfPackets() != null) {
-                            System.out.println("[ALogCatReader -> checkNetwork$ Returning number of packets.");
+                            //System.out.println("[ALogCatReader -> checkNetwork$ Returning number of packets.");
                             return AdbUtils.numberOfPackets();
                         }else {
                             System.out.println("[LogCatReader -> checkNetwork$ Problem in extracting number of packets for this application.");
                         }
                     }
 
-
-                }else {
-                    System.out.println("[LogCatReader -> checkNetwork$ No active/established network connection.");
                 }
 
-            }else{
-                System.out.println("[LogCatReader -> checkNetwork$ No active network interface.");
             }
 
-        } else {
-            System.out.println("[LogCatReader -> checkNetwork$ Failed to check network connection.");
         }
 
         return null;
     }
 
-    //Gets API/method call name from the logged line
+
+    /*
+     * ********************************************************************************************************
+     *                                       TOOL WINDOW UPDATE
+     * ********************************************************************************************************
+     * */
+
+    //To update the line graph periodically even without new energy consumptions value
+    public void updateLineGraph() {
+        timer.scheduleAtFixedRate(new TimerTask() {
+            @Override
+            public void run() {
+
+                if (running && updatingFlag) {
+
+                    //If application package name is still null try to get it
+                    if(applicationPackageName == null){
+                        applicationPackageName = LogcatAnalyzerToolWindowFactory.getPackageName();
+                    }
+
+                    AdbUtils.isScreenOn();
+
+                    if (batteryLevel > 0 ) {
+                        //TEST HW CAMERA
+                        AdbUtils.isCameraOn();
+
+                        //TEST HW APP Display focus
+                        AdbUtils.isAppCurrentFocusOFScreen(applicationPackageName);
+
+                        //TEST HW GPS
+                        AdbUtils.isUsingGPS(applicationPackageName);
+
+
+                        //HW -Network
+                        networkCurrentUsageMap = checkNetwork(applicationPackageName);
+                        //current and initial network info available -> check if updating energy is needed
+                        if (networkCurrentUsageMap !=null && networkInitialUsageMap != null) {
+                            for (Map.Entry<String,Integer[]> entryCurrent: networkCurrentUsageMap.entrySet()) {
+                                for (Map.Entry<String,Integer[]> entryInitial: networkInitialUsageMap.entrySet()){
+                                    if (entryCurrent.getKey() == entryInitial.getKey()) {
+                                        if (entryCurrent.getValue()[0] - entryInitial.getValue()[0] > 0 && entryCurrent.getValue()[1] - entryInitial.getValue()[1] > 0) {
+                                            //TODO: calculation of battery consumption
+                                            //Application is using network calculate based on the power
+                                            //wlan0 -> WiFi
+                                            //eth0 -> cellular data
+                                            Integer[] newValues = entryCurrent.getValue();
+                                            Integer[] oldValues = entryInitial.getValue();
+
+                                    /* Replacing map value
+                                    public V replace(K key, V newValue)
+                                    public boolean replace(K key, V oldValue, V newValue)*/
+
+                                            networkInitialUsageMap.replace(entryCurrent.getKey(), newValues);
+                                        }
+                                    }
+                                }
+                            }
+                        } else if (networkCurrentUsageMap !=null && networkInitialUsageMap == null) {
+                            //current info available and initial is null -> network is connected and established recently -> update the initial map -> no need to update energy
+                            for (Map.Entry<String,Integer[]> entryCurrent: networkCurrentUsageMap.entrySet()) {
+                                networkInitialUsageMap.put(entryCurrent.getKey(), entryCurrent.getValue());
+                            }
+                        }
+
+
+                        //HW -GPS
+                        boolean gpsInUse = AdbUtils.isUsingGPS(applicationPackageName);
+                        if (gpsInUse) {
+                            //TODO:calculation of battery consumption
+                        }
+
+
+
+                        LogcatAnalyzerToolWindowFactory.updateLineGraph(batteryLevel);
+                    }
+
+                }
+
+
+            }
+        }
+        ,0,1000);  // Updated every 1 second
+    }
+
+
+    /*
+     * ********************************************************************************************************
+     *                                       HELPER METHODS
+     * ********************************************************************************************************
+     * */
+
+    // Shows a dialog window in the android studio with the input message
+    public static void showSystemUsageDialog(String message) {
+        ApplicationManager.getApplication().invokeLater(() -> {
+            Messages.showMessageDialog(message, "SECDroid Usage", Messages.getInformationIcon());
+        });
+
+    }
+
+    //Gets info from the logged line (log statements)
+    private String getInfoFromLine(String line) {
+        // finds the index of the open parentheses signe ("(") in the logged line
+        int openParentheses = line.indexOf('(');
+        if (openParentheses < 0) {
+            return null;
+        }
+
+        // finds the index of the close parentheses signe (")") in the logged line
+        int closeParentheses = line.indexOf(')');
+        if (closeParentheses < 0) {
+            return null;
+        }
+
+        // returns the string in the parentheses
+        return line.substring(openParentheses + 1, closeParentheses).trim();
+
+    }
+
+    //Gets API/method call name from the logged line log statements)
     private String getAPICallName(String line) {
         // finds the index of the open parentheses signe ("(") in the logged line
         int index = line.indexOf('(');
@@ -362,114 +523,25 @@ public class LogCatReader implements Runnable {
 
         // returns the first argument in the parentheses
         return line.substring(index + 1, firstComma).trim();
-
     }
 
-    //Gets API/method call name from the logged line
-    private String getInfoFromLine(String line) {
-        // finds the index of the open parentheses signe ("(") in the logged line
-        int openParentheses = line.indexOf('(');
-        if (openParentheses < 0) {
-            return null;
-        }
-
-        // finds the index of the close parentheses signe ("(") in the logged line
-        int closeParentheses = line.indexOf(')');
-        if (closeParentheses < 0) {
-            return null;
-        }
-
-        // returns the first argument in the parentheses
-        return line.substring(openParentheses + 1, closeParentheses).trim();
-
+    //Gets the first element from the logged line (log statements)
+    private String getFirstElementOfLogStatement(String line) {
+        String[] parts = line.split("[(),]");
+        return parts[1];
     }
 
-    //Cancel timer and clear the variables, LogCat file, and all components in the tool window
-    public void stop() throws IOException {
-        running = false;
-
-        LogcatAnalyzerToolWindowFactory.saveResultsToFile();
-
-        AdbUtils.clearLogCatFile();
-
-        redAPIsCount.clear();
-        energyConsumption = 0;
-        batteryLevel = 0;
-
-        LogcatAnalyzerToolWindowFactory.clearAllComponents();
-        timer.cancel();
+    //Gets the second element from the logged line (log statements)
+    private String getSecondElementOfLogStatement(String line) {
+        String[] parts = line.split("[(),]");
+        return parts[2];
     }
 
-    //To update the line graph periodically even without new energy consumptions value
-    public void updateLineGraph() {
-        timer.scheduleAtFixedRate(new TimerTask() {
-            @Override
-            public void run() {
-
-                if (running) {
-
-                }
-
-                AdbUtils.isScreenOn();
-
-                if (batteryLevel > 0 ) {
-                    //TEST HW CAMERA
-                    AdbUtils.isCameraOn();
-
-                    //TEST HW APP Display focus
-                    AdbUtils.isAppCurrentFocusOFScreen(applicationPackageName);
-
-                    //TEST HW GPS
-                    AdbUtils.isUsingGPS(applicationPackageName);
-
-
-                    //HW -Network
-                    networkCurrentUsageMap = checkNetwork(applicationPackageName);
-                    //current and initial network info available -> check if updating energy is needed
-                    if (networkCurrentUsageMap !=null && networkInitialUsageMap != null) {
-                        for (Map.Entry<String,Integer[]> entryCurrent: networkCurrentUsageMap.entrySet()) {
-                            for (Map.Entry<String,Integer[]> entryInitial: networkInitialUsageMap.entrySet()){
-                                if (entryCurrent.getKey() == entryInitial.getKey()) {
-                                    if (entryCurrent.getValue()[0] - entryInitial.getValue()[0] > 0 && entryCurrent.getValue()[1] - entryInitial.getValue()[1] > 0) {
-                                        //TODO: calculation of battery consumption
-                                        //Application is using network calculate based on the power
-                                        //wlan0 -> WiFi
-                                        //eth0 -> cellular data
-                                        Integer[] newValues = entryCurrent.getValue();
-                                        Integer[] oldValues = entryInitial.getValue();
-
-                                    /* Replacing map value
-                                    public V replace(K key, V newValue)
-                                    public boolean replace(K key, V oldValue, V newValue)*/
-
-                                        networkInitialUsageMap.replace(entryCurrent.getKey(), newValues);
-                                    }
-                                }
-                            }
-                        }
-                    } else if (networkCurrentUsageMap !=null && networkInitialUsageMap == null) {
-                        //current info available and initial is null -> network is connected and established recently -> update the initial map -> no need to update energy
-                        for (Map.Entry<String,Integer[]> entryCurrent: networkCurrentUsageMap.entrySet()) {
-                            networkInitialUsageMap.put(entryCurrent.getKey(), entryCurrent.getValue());
-                        }
-                    }
-
-
-                    //HW -GPS
-                    boolean gpsInUse = AdbUtils.isUsingGPS(applicationPackageName);
-                    if (gpsInUse) {
-                        //TODO:calculation of battery consumption
-                    }
-
-
-
-                    LogcatAnalyzerToolWindowFactory.updateLineGraph(batteryLevel);
-                }
-            }
-        }
-        ,0,1000);  // Updated every 1 second
+    ////Gets the third element from the logged line (log statements)
+    private String getThirdElementOfLogStatement(String line) {
+        String[] parts = line.split("[(),]");
+        return parts[3];
     }
-
 
 //    private void fillTheTable(Map<TwoStringKey,Integer> inputNumberOfRunningEachMethodMap) {
 //        // Iterate over each entry in the map and print the key and value
