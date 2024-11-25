@@ -1,8 +1,6 @@
 package com.github.lylanv.secdroid.toolWindows;
 
-import com.android.tools.r8.L;
 import com.android.tools.r8.M;
-import com.android.tools.r8.internal.Sy;
 import com.github.lylanv.secdroid.events.ApplicationStartedEvent;
 import com.github.lylanv.secdroid.events.ApplicationStoppedEvent;
 import com.github.lylanv.secdroid.events.BuildSuccessEvent;
@@ -10,19 +8,15 @@ import com.github.lylanv.secdroid.events.BuildSuccessEvent;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.util.Map;
-import java.util.HashMap;
-import java.util.Timer;
-import java.util.TimerTask;
+import java.sql.Struct;
+import java.util.*;
 
-import com.github.lylanv.secdroid.inspections.AdbUtils;
-import com.github.lylanv.secdroid.inspections.DroidEC;
-import com.github.lylanv.secdroid.inspections.EventBusManager;
-import com.github.lylanv.secdroid.inspections.Singleton;
+import com.github.lylanv.secdroid.inspections.*;
 import com.github.lylanv.secdroid.utils.TwoStringKey;
 import com.google.common.eventbus.Subscribe;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.ui.Messages;
+import it.unimi.dsi.fastutil.ints.H;
 
 public class LogCatReader implements Runnable {
 
@@ -38,8 +32,8 @@ public class LogCatReader implements Runnable {
 
     Map<TwoStringKey, Double> currentMethodEnergyUsageMap = new HashMap<>();
 
-    public static int energyConsumption = 0;
-    public static int batteryLevel = 0;
+    public static double energyConsumption = 0;
+    public static double batteryLevel = 0;
 
     private Timer timer;
 
@@ -60,6 +54,11 @@ public class LogCatReader implements Runnable {
     String applicationPackageName;
 
     private boolean isOutputReady = false;
+
+    // These variables are added to be able to calculate the energy consumption of HW components for each method
+    private Stack<MethodInfo> stack = new Stack<>();
+    private Map<TwoStringKey, Long> methodTimes = new HashMap<>();
+    private Map<TwoStringKey, Double> hwBatteryConsumption = new HashMap<>();
 
 
     public LogCatReader() {
@@ -166,6 +165,13 @@ public class LogCatReader implements Runnable {
 //    }
 
 
+
+    /*
+     * ********************************************************************************************************
+     *                                       RUN() and STOP()
+     * ********************************************************************************************************
+     * */
+
     @Override
     public void run() {
         try {
@@ -182,7 +188,7 @@ public class LogCatReader implements Runnable {
             System.out.println("[GreenEdge -> LogCatReader$ The LogCat file has been cleared.");
 
             while (!AdbUtils.isEmulatorBooted()) {
-                //Wait: Stay in the loop
+                //Wait: Stay in the loop until emulator is booted!
             }
 
             if (AdbUtils.isEmulatorBooted()) {
@@ -275,42 +281,147 @@ public class LogCatReader implements Runnable {
                         }else{
                             //Log statement is for Start or End of a method
                             if(getThirdElementOfLogStatement(line).contains(MethodStartTAG)){
+
                                 //Extract elements
                                 String firstElement = getFirstElementOfLogStatement(line);
                                 String secondElement = getSecondElementOfLogStatement(line);
 
+                                //To calculate the energy consumption of hardware components for methods
+                                MethodInfo methodInfo = new MethodInfo(firstElement,secondElement,System.currentTimeMillis(), AdbUtils.isCameraOn(),AdbUtils.isUsingGPS(applicationPackageName),
+                                        AdbUtils.isScreenOn(),AdbUtils.getScreenBrightnessLevel(),AdbUtils.isBluetoothConnected(),checkNetwork(applicationPackageName));
+                                stack.push(methodInfo);
 
-                                TwoStringKey key = new TwoStringKey(secondElement, firstElement);
-                                Double energy = Singleton.methodsAPICallsTotalEnergyCostMap.get(key);
+
+//                                TwoStringKey key = new TwoStringKey(secondElement, firstElement);
+//                                Double energy = Singleton.methodsAPICallsTotalEnergyCostMap.get(key);
+//
+//                                Object key1 = secondElement;
+//                                Object key2 = firstElement;
+//
+//                                if (currentMethodEnergyUsageMap.isEmpty()) {
+//                                    currentMethodEnergyUsageMap.put(key, energy);
+//                                    Object[] rowData = {key1, key2, energy};
+//                                    LogcatAnalyzerToolWindowFactory.addOrUpdateTableRow(key1,key2,rowData);
+//
+//                                } else if (currentMethodEnergyUsageMap.containsKey(key)) {
+//                                    Double oldEnergy = currentMethodEnergyUsageMap.get(key);
+//                                    Double newEnergy = oldEnergy + energy;
+//                                    currentMethodEnergyUsageMap.put(key, newEnergy);
+//                                    Object[] rowData = {key1, key2, newEnergy};
+//                                    LogcatAnalyzerToolWindowFactory.addOrUpdateTableRow(key1,key2,rowData);
+//                                }else {
+//                                    currentMethodEnergyUsageMap.put(key, energy);
+//                                    Object[] rowData = {key1, key2, energy};
+//                                    LogcatAnalyzerToolWindowFactory.addOrUpdateTableRow(key1,key2,rowData);
+//                                }
+
+
+                            } else if (getThirdElementOfLogStatement(line).contains(MethodEndTAG)) {
+
+                                MethodInfo methodInfo = stack.pop();
+                                long totalTime = System.currentTimeMillis() - methodInfo.getStartTime();
+                                long selfTime = totalTime - methodInfo.getNestedTime();
+                                long selfTimeSeconds = selfTime / 1000;
+
+                                //Extract elements
+                                String firstElement = getFirstElementOfLogStatement(line);
+                                String secondElement = getSecondElementOfLogStatement(line);
 
                                 Object key1 = secondElement;
                                 Object key2 = firstElement;
 
+                                TwoStringKey key = new TwoStringKey(secondElement, firstElement);
+
+                                Double hwBatteryConsumptionValue = 0.0;
+                                if (hwBatteryConsumption.containsKey(key)) {
+                                    hwBatteryConsumptionValue = hwBatteryConsumption.get(key);
+                                }
+
+                                // Camera
+                                if (AdbUtils.isCameraOn() || methodInfo.isCameraStatusStart()){
+
+                                    hwBatteryConsumptionValue += batteryPercentage(PowerXML.getCameraAvg(),selfTimeSeconds);
+
+                                    //TODO: check with prof. Paulo that if I need to consider screen energy consumption when camera is on!
+                                    int brightnessLevelOfScreen = AdbUtils.getScreenBrightnessLevel();
+                                    if (brightnessLevelOfScreen != -1){
+                                        hwBatteryConsumptionValue += (batteryPercentage(PowerXML.getScreenOn(), selfTimeSeconds) + batteryPercentage((PowerXML.getScreenFull() * (brightnessLevelOfScreen) / 255), selfTime));
+                                    }else {
+                                        hwBatteryConsumptionValue += (batteryPercentage(PowerXML.getScreenOn(), selfTimeSeconds));
+                                    }
+                                }
+
+                                //GPS
+                                if (AdbUtils.isUsingGPS(applicationPackageName) || methodInfo.isCameraStatusStart()){
+                                    hwBatteryConsumptionValue += batteryPercentage(PowerXML.getGpsOn(),selfTimeSeconds);
+                                }
+
+                                //Screen
+                                if (AdbUtils.isScreenOn() || methodInfo.isCameraStatusStart()){
+                                    int brightnessLevelOfScreen = AdbUtils.getScreenBrightnessLevel();
+                                    if (brightnessLevelOfScreen != -1){
+                                        hwBatteryConsumptionValue += (batteryPercentage(PowerXML.getScreenOn(), selfTimeSeconds) + batteryPercentage((PowerXML.getScreenFull() * (brightnessLevelOfScreen) / 255), selfTime));
+                                    }else {
+                                        hwBatteryConsumptionValue += (batteryPercentage(PowerXML.getScreenOn(), selfTimeSeconds));
+                                    }
+                                }
+                                //Bluetooth
+                                if (AdbUtils.isBluetoothConnected() || methodInfo.isCameraStatusStart()){
+                                    hwBatteryConsumptionValue += batteryPercentage(PowerXML.getBluetoothActive(),selfTimeSeconds);
+                                }
+                                //Network
+                                if (methodInfo.getNetworkPacketsStart() != null){
+                                    if (!methodInfo.getNetworkPacketsStart().isEmpty()){
+                                        //Network (Cellular data and Wi-Fi) battery consumption
+                                        Map<String,Integer[]> networkPacketsAtStart = methodInfo.getNetworkPacketsStart();
+                                        Map<String,Integer[]> networkCurrentPackets = checkNetwork(applicationPackageName);
+                                        if (networkCurrentPackets !=null) {
+                                            for (Map.Entry<String,Integer[]> entryCurrent: networkCurrentPackets.entrySet()) {
+                                                for (Map.Entry<String,Integer[]> entryInitial: networkPacketsAtStart.entrySet()){
+                                                    if (entryCurrent.getKey() == entryInitial.getKey()) {
+                                                        if (entryCurrent.getValue()[0] - entryInitial.getValue()[0] > 0 || entryCurrent.getValue()[1] - entryInitial.getValue()[1] > 0) {
+                                                            //Calculation of battery consumption
+                                                            //Application is using network calculate based on the power
+                                                            //wlan0 -> Wi-Fi
+                                                            //eth0 -> cellular data
+                                                            if (entryCurrent.getKey().contains("wlan0")){ // Wi-Fi
+                                                                hwBatteryConsumptionValue += batteryPercentage(PowerXML.getWifiActive(),selfTimeSeconds);
+                                                            }else if (entryCurrent.getKey().contains("eth0")){// Cellular data
+                                                                hwBatteryConsumptionValue += batteryPercentage(PowerXML.getRadioActive(),selfTimeSeconds);
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                    }
+                                }
+
+                                hwBatteryConsumption.put(key,hwBatteryConsumptionValue);
+
+
+
+                                //API calls
+                                Double energy = Singleton.methodsAPICallsTotalEnergyCostMap.get(key);
+
                                 if (currentMethodEnergyUsageMap.isEmpty()) {
                                     currentMethodEnergyUsageMap.put(key, energy);
-                                    Object[] rowData = {key1, key2, energy};
+                                    Object[] rowData = {key1, key2, energy, hwBatteryConsumptionValue};
                                     LogcatAnalyzerToolWindowFactory.addOrUpdateTableRow(key1,key2,rowData);
 
                                 } else if (currentMethodEnergyUsageMap.containsKey(key)) {
                                     Double oldEnergy = currentMethodEnergyUsageMap.get(key);
                                     Double newEnergy = oldEnergy + energy;
                                     currentMethodEnergyUsageMap.put(key, newEnergy);
-                                    Object[] rowData = {key1, key2, newEnergy};
+                                    Object[] rowData = {key1, key2, newEnergy, hwBatteryConsumptionValue};
                                     LogcatAnalyzerToolWindowFactory.addOrUpdateTableRow(key1,key2,rowData);
                                 }else {
                                     currentMethodEnergyUsageMap.put(key, energy);
-                                    Object[] rowData = {key1, key2, energy};
+                                    Object[] rowData = {key1, key2, energy, hwBatteryConsumptionValue};
                                     LogcatAnalyzerToolWindowFactory.addOrUpdateTableRow(key1,key2,rowData);
                                 }
 
-//                                if (numberOfRunningEachMethodMap.isEmpty()) {
-//                                    numberOfRunningEachMethodMap.put(key, 1);
-//                                } else if (numberOfRunningEachMethodMap.containsKey(key)) {
-//                                    int oldCount = numberOfRunningEachMethodMap.get(key);
-//                                    numberOfRunningEachMethodMap.put(key, oldCount + 1);
-//                                }else {
-//                                    numberOfRunningEachMethodMap.put(key,1);
-//                                }
                             }
 
                         }
@@ -358,6 +469,15 @@ public class LogCatReader implements Runnable {
         if (redAPIsCount != null) {
             redAPIsCount.clear();
         }
+
+        //NOT TESTED
+        if (networkInitialUsageMap != null){
+            networkInitialUsageMap.clear();
+        }
+        if (networkCurrentUsageMap != null){
+            networkCurrentUsageMap.clear();
+        }
+        //NOT TESTED
 
         energyConsumption = 0;
         batteryLevel = 0;
@@ -459,35 +579,56 @@ public class LogCatReader implements Runnable {
 
                     if (batteryLevel > 0 ) {
 
+                        //Camera battery consumption
                         if (AdbUtils.isCameraOn()){
-                            //TODO calculate the battery consumption
-                            batteryLevel--;
+                            batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getCameraAvg());
                             System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$ CAMERA -> batteryLevel " + batteryLevel);
+
+                            //TODO: check with prof. Paulo that if I need to consider screen energy consumption when camera is on!
+                            int brightnessLevelOfScreen = AdbUtils.getScreenBrightnessLevel();
+                            if (brightnessLevelOfScreen != -1){
+                                batteryLevel = batteryLevel - (batteryPercentageInOneSecond(PowerXML.getScreenOn()) + batteryPercentageInOneSecond((PowerXML.getScreenFull() * (brightnessLevelOfScreen)/255)));
+                            }else {
+                                batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getScreenOn());
+                            }
                         }
 
-
+                        //Screen battery consumption
                         if (AdbUtils.isAppCurrentFocusOFScreen(applicationPackageName)){
-                            batteryLevel--;
-                            System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$ Screen -> batteryLevel " + batteryLevel);
+                            int brightnessLevelOfScreen = AdbUtils.getScreenBrightnessLevel();
+                            if (brightnessLevelOfScreen != -1){
+                                batteryLevel = batteryLevel - (batteryPercentageInOneSecond(PowerXML.getScreenOn()) + batteryPercentageInOneSecond((PowerXML.getScreenFull() * (brightnessLevelOfScreen)/255)));
+                            }else {
+                                batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getScreenOn());
+                            }
+
                         }
 
+                        //GPS battery consumption
                         if (AdbUtils.isUsingGPS(applicationPackageName)){
-                            batteryLevel--;
+                            batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getGpsOn());
                         }
 
 
-                        //HW -Network
+                        //Network (Cellular data and Wi-Fi) battery consumption
                         networkCurrentUsageMap = checkNetwork(applicationPackageName);
                         //current and initial network info available -> check if updating energy is needed
                         if (networkCurrentUsageMap !=null && networkInitialUsageMap != null) {
                             for (Map.Entry<String,Integer[]> entryCurrent: networkCurrentUsageMap.entrySet()) {
                                 for (Map.Entry<String,Integer[]> entryInitial: networkInitialUsageMap.entrySet()){
                                     if (entryCurrent.getKey() == entryInitial.getKey()) {
-                                        if (entryCurrent.getValue()[0] - entryInitial.getValue()[0] > 0 && entryCurrent.getValue()[1] - entryInitial.getValue()[1] > 0) {
-                                            //TODO: calculation of battery consumption
+                                        if (entryCurrent.getValue()[0] - entryInitial.getValue()[0] > 0 || entryCurrent.getValue()[1] - entryInitial.getValue()[1] > 0) {
+                                            //Calculation of battery consumption
                                             //Application is using network calculate based on the power
-                                            //wlan0 -> WiFi
+                                            //wlan0 -> Wi-Fi
                                             //eth0 -> cellular data
+                                            if (entryCurrent.getKey().contains("wlan0")){ // Wi-Fi
+                                                batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getWifiActive());
+                                            }else if (entryCurrent.getKey().contains("eth0")){// Cellular data
+                                                batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getRadioActive());
+                                            }
+
+                                            //Updating network status
                                             Integer[] newValues = entryCurrent.getValue();
                                             Integer[] oldValues = entryInitial.getValue();
 
@@ -506,6 +647,10 @@ public class LogCatReader implements Runnable {
                             }
                         }
 
+                        //Bluetooth battery consumption
+                        if (AdbUtils.isBluetoothConnected()){
+                            batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getBluetoothActive());
+                        }
 
 
                         LogcatAnalyzerToolWindowFactory.updateLineGraph(batteryLevel);
@@ -587,6 +732,20 @@ public class LogCatReader implements Runnable {
     private String getThirdElementOfLogStatement(String line) {
         String[] parts = line.split("[(),]");
         return parts[3];
+    }
+
+    private double batteryPercentageInOneSecond(double inMilliAmpSecond) {
+
+        //Battery capacity = 6000 mAh = 21600000 mAs -> 100% battery charge and 100% battery health
+        return  (100*inMilliAmpSecond)/((PowerXML.getStateOfHealth()/100) * (batteryLevel/100) * (PowerXML.getBatteryCapacity()*3600));
+
+    }
+
+    private double batteryPercentage(double inMilliAmpSecond, double duration) {
+
+        //Battery capacity = 6000 mAh = 21600000 mAs -> 100% battery charge and 100% battery health
+        return  (100*inMilliAmpSecond*duration)/((PowerXML.getStateOfHealth()/100) * (batteryLevel/100) * (PowerXML.getBatteryCapacity()*3600));
+
     }
 
 //    private void fillTheTable(Map<TwoStringKey,Integer> inputNumberOfRunningEachMethodMap) {

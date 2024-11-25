@@ -163,7 +163,7 @@ public class LogcatAnalyzerToolWindowFactory implements ToolWindowFactory {
 //        return tableScrollPane;
 
         // Define column names
-        Object[] columnNames = {"Class Name", "Method Name", "Energy Consumption"};
+        Object[] columnNames = {"Class Name", "Method Name", "API Energy Consumption", "Hardware Energy Consumption"};
 
         // Initialize the custom table model with column names
         tableModel = new CustomTableModel(columnNames);

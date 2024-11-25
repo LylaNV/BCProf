@@ -571,9 +571,42 @@ public class AdbUtils {
         }
     }
 
+    public static int getScreenBrightnessLevel(){
+
+        try {
+            ProcessBuilder pb = new ProcessBuilder(adbPath, "shell", "settings", "get", "system", "screen_brightness");
+            Process pbProcess = pb.start();
+
+            if (pbProcess != null) {
+                BufferedReader reader = new BufferedReader(new InputStreamReader(pbProcess.getInputStream()));
+
+                String line;
+                while ((line = reader.readLine()) != null) {
+
+                    if (!line.isEmpty()) {
+                        reader.close();
+                        return Integer.parseInt(line);
+                    }
+
+                }
+
+                reader.close();
+                return -1;
+            } else {
+                System.out.println("[AdbUtils -> getBrightnessLevel$ FATAL ERROR. Failed to get screen brightness level process.");
+                return -1;
+            }
+        } catch (Exception e){
+            e.printStackTrace();
+            System.out.println("[AdbUtils -> getBrightnessLevel$ FATAL ERROR: IO Error. Failed to get screen brightness level");
+            return -1;
+        }
+
+    }
+
     /* *****************************************************************
      * For checking camera component
-     *
+     * isCameraOn
      ****************************************************************** */
     //Returns ture if the camera is in used -> My base assumption is that the only app running on the phone is our app
     //so, if camera is open and in use, it means that app is using it
@@ -600,6 +633,56 @@ public class AdbUtils {
         } catch (Exception e){
             e.printStackTrace();
             System.out.println("[AdbUtils -> isCameraOn$ FATAL ERROR: IO Error. Failed to get camera status.");
+            return false;
+        }
+    }
+
+
+    /* *****************************************************************
+     * For checking camera component
+     *
+     ****************************************************************** */
+    public static boolean isBluetoothConnected() {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(adbPath, "shell", "dumpsys", "bluetooth_manager", "|", "grep", "-i", "state");
+            Process pbProcess = pb.start();
+
+            boolean isBluetoothOn = false;
+            boolean isBluetoothConnected = false;
+
+            if (pbProcess != null) {
+
+                BufferedReader reader = new BufferedReader(new InputStreamReader(pbProcess.getInputStream()));
+
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    // Check if the state is ON
+                    if (line.trim().startsWith("state:") && line.contains("ON")) {
+                        isBluetoothOn = true;
+                    }
+
+                    // Check if the ConnectionState is CONNECTED
+                    if (line.trim().startsWith("ConnectionState:") && line.contains("STATE_CONNECTED")) {
+                        isBluetoothConnected = true;
+                    }
+
+                    // If both conditions are met, exit early
+                    if (isBluetoothOn && isBluetoothConnected) {
+                        reader.close();
+                        return true;
+                    }
+                }
+
+                reader.close();
+                return false;
+
+            } else {
+                System.out.println("[AdbUtils -> isBluetoothConnected$ FATAL ERROR. Failed to get bluetooth status process.");
+                return false;
+            }
+        } catch (Exception e){
+            e.printStackTrace();
+            System.out.println("[AdbUtils -> isBluetoothConnected$ FATAL ERROR: IO Error. Failed to get bluetooth status.");
             return false;
         }
     }

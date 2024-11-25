@@ -5,6 +5,9 @@ import com.github.lylanv.secdroid.utils.ThreeStringKey;
 import com.github.lylanv.secdroid.utils.TwoStringKey;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
+import com.intellij.openapi.fileChooser.FileChooser;
+import com.intellij.openapi.fileChooser.FileChooserDescriptor;
+import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.wm.ToolWindow;
 import org.jetbrains.annotations.NotNull;
 
@@ -54,6 +57,7 @@ public class DroidEC extends AnAction {
 
         System.out.println("[GreenMeter -> actionPerformed$ GreenMeter button is clicked");
 
+
         //fillRedAPICallsSet();
 
         //Gets the project
@@ -65,6 +69,9 @@ public class DroidEC extends AnAction {
             //TODO: Singleton is not recommended in plugin development, consider to remove it.
             projectName = project.getName();
             singleton = new Singleton();
+
+            showPowerXmlFileChooser();
+            getBatteryHealthAndCapacity();
         }
 
         //Initiates the importChecker -> this variable is used to check the list of the imports in the project and add any missing one
@@ -199,6 +206,71 @@ public class DroidEC extends AnAction {
         }
     }
 
+    private void getBatteryHealthAndCapacity() {
+        BatteryHealthAndCapacityDialog dialog = new BatteryHealthAndCapacityDialog();
+        if (dialog.showAndGet()) { // showAndGet() returns true if OK is clicked
+            String batteryCapacity = dialog.getBatteryCapacity();
+            String batteryHealth = dialog.getBatteryHealth();
+
+            if (batteryCapacity == null && batteryHealth == null) {
+                Messages.showWarningDialog("No values were inserted. Default values will be used! \n Battery capacity = 5000 mAh, Battery health = 100%", "Battery Capacity and Health Status");
+            } else if (batteryCapacity == null && batteryHealth != null) {
+                Messages.showWarningDialog("No values is inserted for battery capacity. Default value will be used! \n Battery capacity = 5000 mAh", "Battery Capacity and Health Status");
+            } else if (batteryCapacity != null && batteryHealth == null) {
+                Messages.showWarningDialog("No values is inserted for battery health. Default value will be used! \n Battery health = 100%", "Battery Capacity and Health Status");
+            }else {
+                if (isValidDouble(batteryCapacity) && isValidDouble(batteryHealth)) {
+                    double batteryCapacityDouble = Double.parseDouble(batteryCapacity);
+                    PowerXML.setBatteryCapacity(batteryCapacityDouble);
+
+                    double batteryHealthDouble = Double.parseDouble(batteryHealth);
+                    if (0 <= batteryHealthDouble &&  batteryHealthDouble <= 100) {
+                        PowerXML.setStateOfHealth(batteryHealthDouble);
+                    }else {
+                        Messages.showWarningDialog("The value of battery health is out of range. Default value will be used! \n Battery capacity = 100%", "Battery Capacity and Health Status");
+                    }
+
+                }else if (!isValidDouble(batteryCapacity) && isValidDouble(batteryHealth)) {
+                    Messages.showWarningDialog("The value of battery capacity is not in the correct format. Default value will be used! \n Battery capacity = 5000 mAh", "Battery Capacity and Health Status");
+                }else if (isValidDouble(batteryCapacity) && !isValidDouble(batteryHealth)) {
+                    Messages.showWarningDialog("The value of battery health is not in the correct format. Default value will be used! \n Battery health = 100%", "Battery Capacity and Health Status");
+                }else {
+                    Messages.showWarningDialog("The values are not in the correct format. Default value will be used! \n Battery capacity = 5000 mAh, Battery health = 100%", "Battery Capacity and Health Status");
+                }
+            }
+        }
+    }
+
+    private boolean isValidDouble(String value){
+        if (value == null || value.length() == 0) {
+            return false;
+        }
+
+        try {
+            Double.parseDouble(value);
+            return true;
+        }catch (NumberFormatException e){
+            return false;
+        }
+    }
+
+    private void showPowerXmlFileChooser() {
+        // Create a FileChooserDescriptor to specify what kind of files to allow
+        FileChooserDescriptor fileChooserDescriptor = new FileChooserDescriptor(true, false, false, false, false, false);
+        fileChooserDescriptor.setTitle("Select a Txt File");
+        fileChooserDescriptor.setDescription("Select the power txt file exported from a mobile device.");
+
+        // Open the file chooser
+        VirtualFile file = FileChooser.chooseFile(fileChooserDescriptor, project, null);
+
+        if (file != null) {
+            // Perform actions with the selected file
+            Messages.showInfoMessage("You selected: " + file.getPath(), "File Selected");
+        } else {
+            Messages.showWarningDialog("No file was selected. Default values will be used for hardware components power usage!", "File Not Selected");
+        }
+    }
+
 
     // This method converts VirtualFiles to psiClass
     private static PsiClass[] convertVirtualFileToPsiClass(Project project, VirtualFile virtualFile) {
@@ -280,6 +352,7 @@ public class DroidEC extends AnAction {
 
         methodCalls.addAll(PsiTreeUtil.collectElementsOfType(methodBody, PsiMethodCallExpression.class));
 
+        //TODO: Correct the API calls energy
         for (PsiMethodCallExpression psiMethodCallExpression : methodCalls) {
             PsiReferenceExpression methodExpression = psiMethodCallExpression.getMethodExpression();
             String methodName = methodExpression.getReferenceName();  // Get the method name
