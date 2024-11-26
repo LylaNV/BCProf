@@ -348,17 +348,6 @@ public class DroidEC extends AnAction {
 
                                 if (!"finish".equals(lastMethodName) && !"startActivityForResult".equals(lastMethodName)) {
                                     generateMethodEndLogAndAdd(methodName, className, psiMethod, methodBody);
-//                                    //Generate the method end log statement
-//                                    String endLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodName + "," + className + "," + MethodEnd_TAG + ")\");";
-//                                    PsiStatement endLogStatementElement = factory.createStatementFromText(endLogStatement, psiMethod);
-//
-//                                    CodeStyleManager codeStyleManager = CodeStyleManager.getInstance(project);
-//
-//
-//                                    //Add the method end log statement
-//                                    WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {
-//                                        methodBody.add(endLogStatementElement);
-//                                    });
 
                                 } else {
 
@@ -374,33 +363,10 @@ public class DroidEC extends AnAction {
                             }
                         }else {
                             generateMethodEndLogAndAdd(methodName, className, psiMethod, methodBody);
-
-//                            //Generate the method end log statement
-//                            String endLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodName + "," + className + "," + MethodEnd_TAG + ")\");";
-//                            PsiStatement endLogStatementElement = factory.createStatementFromText(endLogStatement, psiMethod);
-//
-//                            CodeStyleManager codeStyleManager = CodeStyleManager.getInstance(project);
-//
-//
-//                            //Add the method end log statement
-//                            WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {
-//                                methodBody.add(endLogStatementElement);
-//                            });
                         }
                     }else {
                         generateMethodEndLogAndAdd(methodName, className, psiMethod, methodBody);
 
-//                        //Generate the method end log statement
-//                        String endLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodName + "," + className + "," + MethodEnd_TAG + ")\");";
-//                        PsiStatement endLogStatementElement = factory.createStatementFromText(endLogStatement, psiMethod);
-//
-//                        CodeStyleManager codeStyleManager = CodeStyleManager.getInstance(project);
-//
-//
-//                        //Add the method end log statement
-//                        WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {
-//                            methodBody.add(endLogStatementElement);
-//                        });
                     }
 
                 }
