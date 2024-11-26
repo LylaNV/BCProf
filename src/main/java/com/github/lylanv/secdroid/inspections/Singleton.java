@@ -43,6 +43,7 @@ public class Singleton {
         redAPICalls.put("getInt",1.0);
         redAPICalls.put("getIntExtra",1.0);
         redAPICalls.put("i",1.0);
+        redAPICalls.put("d",1.0); //NOT RED API CALL
         redAPICalls.put("finish",1.0);
         redAPICalls.put("cancelAll",1.0);
         redAPICalls.put("startActivityForResult",1.0);

@@ -330,17 +330,75 @@ public class DroidEC extends AnAction {
                     String startLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodName + "," + className + "," + MethodStart_TAG + ")\");";
                     PsiStatement startLogStatementElement = factory.createStatementFromText(startLogStatement,psiMethod);
 
-                    //Generate the method end log statement
-                    String endLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodName + "," + className + "," + MethodEnd_TAG + ")\");";
-                    PsiStatement endLogStatementElement = factory.createStatementFromText(endLogStatement,psiMethod);
-
-                    CodeStyleManager codeStyleManager = CodeStyleManager.getInstance(project);
-
                     //Add the method start log statement
                     WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {methodBody.addBefore(startLogStatementElement, methodBody.getFirstBodyElement());});
 
-                    //Add the method end log statement
-                    WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {methodBody.add(endLogStatementElement);});
+                    PsiStatement[] statements = methodBody.getStatements();
+                    // Check if the code block has at least one statement
+                    if(statements.length > 0) {
+                        PsiStatement lastStatement = statements[statements.length - 1]; // Get the last statement
+
+                        // Check if the last statement is a method call to finish()
+                        if (lastStatement instanceof PsiExpressionStatement) {
+                            PsiExpression expression = ((PsiExpressionStatement) lastStatement).getExpression();
+                            if (expression instanceof PsiMethodCallExpression) {
+                                PsiMethodCallExpression methodCall = (PsiMethodCallExpression) expression;
+                                PsiReferenceExpression methodExpression = methodCall.getMethodExpression();
+                                String lastMethodName = methodExpression.getReferenceName();
+
+                                if (!"finish".equals(lastMethodName) && !"startActivityForResult".equals(lastMethodName)) {
+
+                                    //Generate the method end log statement
+                                    String endLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodName + "," + className + "," + MethodEnd_TAG + ")\");";
+                                    PsiStatement endLogStatementElement = factory.createStatementFromText(endLogStatement, psiMethod);
+
+                                    CodeStyleManager codeStyleManager = CodeStyleManager.getInstance(project);
+
+
+                                    //Add the method end log statement
+                                    WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {
+                                        methodBody.add(endLogStatementElement);
+                                    });
+
+                                } else {
+
+                                    //Generate the method end log statement
+                                    String endLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodName + "," + className + "," + MethodEnd_TAG + ")\");";
+                                    PsiStatement endLogStatementElement = factory.createStatementFromText(endLogStatement, psiMethod);
+
+                                    // Insert the log statement before the finish() call
+                                    WriteCommandAction.runWriteCommandAction(project, () -> {
+                                        methodBody.addBefore(endLogStatementElement, lastStatement);
+                                    });
+                                }
+                            }
+                        }else {
+                            //Generate the method end log statement
+                            String endLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodName + "," + className + "," + MethodEnd_TAG + ")\");";
+                            PsiStatement endLogStatementElement = factory.createStatementFromText(endLogStatement, psiMethod);
+
+                            CodeStyleManager codeStyleManager = CodeStyleManager.getInstance(project);
+
+
+                            //Add the method end log statement
+                            WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {
+                                methodBody.add(endLogStatementElement);
+                            });
+                        }
+                    }else {
+                        //Generate the method end log statement
+                        String endLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodName + "," + className + "," + MethodEnd_TAG + ")\");";
+                        PsiStatement endLogStatementElement = factory.createStatementFromText(endLogStatement, psiMethod);
+
+                        CodeStyleManager codeStyleManager = CodeStyleManager.getInstance(project);
+
+
+                        //Add the method end log statement
+                        WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {
+                            methodBody.add(endLogStatementElement);
+                        });
+                    }
+
                 }
             }
         }
@@ -356,33 +414,52 @@ public class DroidEC extends AnAction {
         for (PsiMethodCallExpression psiMethodCallExpression : methodCalls) {
             PsiReferenceExpression methodExpression = psiMethodCallExpression.getMethodExpression();
             String methodName = methodExpression.getReferenceName();  // Get the method name
-            System.out.println("-----------Method call found: " + methodName);
-            if (methodsAPICallsCountLocalMap.isEmpty()){ // If this is true, it means that this is the first item we are putting in the Map, so easily add
-                // If the method call is red API call, it affects the energy consumption and should be logged
-                if (singleton.redAPICalls.keySet().contains(methodName)) {
-                    methodsAPICallsCountLocalMap.put(new ThreeStringKey(methodClassName,inputMethodName,methodName),1);
-                    methodsAPICallsTotalEnergyCostLocalMap.put(new TwoStringKey(methodClassName,inputMethodName),singleton.redAPICalls.get(methodName).doubleValue());
-                }
-            }else{
-                // If the method call is red API call, it affects the energy consumption and should be logged
-                if (singleton.redAPICalls.keySet().contains(methodName)) {
-
-                    ThreeStringKey key = new ThreeStringKey(methodClassName,inputMethodName,methodName);
-                    TwoStringKey twoStringKey = new TwoStringKey(methodClassName,inputMethodName);
-                    // The key is already exist
-                    if (methodsAPICallsCountLocalMap.containsKey(key)) {
-                        int oldValue = methodsAPICallsCountLocalMap.get(key);
-                        methodsAPICallsCountLocalMap.put(key,oldValue+1);
-
-                        double oldEnergyCost = methodsAPICallsTotalEnergyCostLocalMap.get(twoStringKey).doubleValue();
-                        methodsAPICallsTotalEnergyCostLocalMap.put(twoStringKey,oldEnergyCost+singleton.redAPICalls.get(methodName).doubleValue());
-                    }else {
-                        // First time to add the key
-                        methodsAPICallsCountLocalMap.put(key,1);
-                        methodsAPICallsTotalEnergyCostLocalMap.put(twoStringKey,singleton.redAPICalls.get(methodName).doubleValue());
+            System.out.println("----------- DroidEC -> Method call found: " + methodName);
+            if (singleton.redAPICalls.keySet().contains(methodName)){
+                if (!methodName.equals("d")) {
+                    updateMethodsEnergyMaps(methodName, methodClassName, inputMethodName);
+                } else {
+                    PsiExpressionList argumentList = psiMethodCallExpression.getArgumentList();
+                    if (argumentList != null) {
+                        PsiExpression[] arguments = argumentList.getExpressions();
+                        PsiExpression firstArgument = arguments[0];
+                        if (!firstArgument.getText().contains(Logging_TAG)) {
+                            updateMethodsEnergyMaps(methodName, methodClassName, inputMethodName);
+                        }
+                    }else{
+                        updateMethodsEnergyMaps(methodName, methodClassName, inputMethodName);
                     }
                 }
             }
+
+
+
+//            if (methodsAPICallsCountLocalMap.isEmpty()){ // If this is true, it means that this is the first item we are putting in the Map, so easily add
+//                // If the method call is red API call, it affects the energy consumption and should be logged
+//                if (singleton.redAPICalls.keySet().contains(methodName)) {
+//                    methodsAPICallsCountLocalMap.put(new ThreeStringKey(methodClassName,inputMethodName,methodName),1);
+//                    methodsAPICallsTotalEnergyCostLocalMap.put(new TwoStringKey(methodClassName,inputMethodName),singleton.redAPICalls.get(methodName).doubleValue());
+//                }
+//            }else{
+//                // If the method call is red API call, it affects the energy consumption and should be logged
+//                if (singleton.redAPICalls.keySet().contains(methodName)) {
+//
+//                    ThreeStringKey key = new ThreeStringKey(methodClassName,inputMethodName,methodName);
+//                    TwoStringKey twoStringKey = new TwoStringKey(methodClassName,inputMethodName);
+//                    // The key is already exist
+//                    if (methodsAPICallsCountLocalMap.containsKey(key)) {
+//                        int oldValue = methodsAPICallsCountLocalMap.get(key);
+//                        methodsAPICallsCountLocalMap.put(key,oldValue+1);
+//
+//                        double oldEnergyCost = methodsAPICallsTotalEnergyCostLocalMap.get(twoStringKey).doubleValue();
+//                        methodsAPICallsTotalEnergyCostLocalMap.put(twoStringKey,oldEnergyCost+singleton.redAPICalls.get(methodName).doubleValue());
+//                    }else {
+//                        // First time to add the key
+//                        methodsAPICallsCountLocalMap.put(key,1);
+//                        methodsAPICallsTotalEnergyCostLocalMap.put(twoStringKey,singleton.redAPICalls.get(methodName).doubleValue());
+//                    }
+//                }
+//            }
 
         }
 
@@ -394,6 +471,37 @@ public class DroidEC extends AnAction {
         if (!methodsAPICallsTotalEnergyCostLocalMap.isEmpty()) {
             singleton.fillMethodsAPICallsEnergyMap(methodsAPICallsTotalEnergyCostLocalMap);
         }
+    }
+
+    private void updateMethodsEnergyMaps(String methodName, String methodClassName, String inputMethodName) {
+
+        if (methodsAPICallsCountLocalMap.isEmpty()){ // If this is true, it means that this is the first item we are putting in the Map, so easily add
+            // If the method call is red API call, it affects the energy consumption and should be logged
+            if (singleton.redAPICalls.keySet().contains(methodName)) {
+                methodsAPICallsCountLocalMap.put(new ThreeStringKey(methodClassName,inputMethodName,methodName),1);
+                methodsAPICallsTotalEnergyCostLocalMap.put(new TwoStringKey(methodClassName,inputMethodName),singleton.redAPICalls.get(methodName).doubleValue());
+            }
+        }else{
+            // If the method call is red API call, it affects the energy consumption and should be logged
+            if (singleton.redAPICalls.keySet().contains(methodName)) {
+
+                ThreeStringKey key = new ThreeStringKey(methodClassName,inputMethodName,methodName);
+                TwoStringKey twoStringKey = new TwoStringKey(methodClassName,inputMethodName);
+                // The key is already exist
+                if (methodsAPICallsCountLocalMap.containsKey(key)) {
+                    int oldValue = methodsAPICallsCountLocalMap.get(key);
+                    methodsAPICallsCountLocalMap.put(key,oldValue+1);
+
+                    double oldEnergyCost = methodsAPICallsTotalEnergyCostLocalMap.get(twoStringKey).doubleValue();
+                    methodsAPICallsTotalEnergyCostLocalMap.put(twoStringKey,oldEnergyCost+singleton.redAPICalls.get(methodName).doubleValue());
+                }else {
+                    // First time to add the key
+                    methodsAPICallsCountLocalMap.put(key,1);
+                    methodsAPICallsTotalEnergyCostLocalMap.put(twoStringKey,singleton.redAPICalls.get(methodName).doubleValue());
+                }
+            }
+        }
+
     }
 
 //    // This method annotates methods - WORKING
@@ -519,22 +627,20 @@ public class DroidEC extends AnAction {
                         if (!methodCallName.equals("d")){
                             addLogStatement(expression,methodCallName, fileName);
                         }else{
-                            if (singleton.redAPICalls.keySet().contains(methodCallName)) {
-                                PsiExpressionList argumentList = expression.getArgumentList();
-                                if (argumentList != null) {
-                                    PsiExpression[] arguments = argumentList.getExpressions();
-                                    PsiExpression firstArgument = arguments[0];
-                                    if (!firstArgument.getText().contains(Logging_TAG)) {
-                                        addLogStatement(expression,methodCallName, fileName);
-                                    }
-                                }else {
+                            PsiExpressionList argumentList = expression.getArgumentList();
+                            if (argumentList != null) {
+                                PsiExpression[] arguments = argumentList.getExpressions();
+                                PsiExpression firstArgument = arguments[0];
+                                if (!firstArgument.getText().contains(Logging_TAG)) {
                                     addLogStatement(expression,methodCallName, fileName);
                                 }
+                            }else {
+                                addLogStatement(expression,methodCallName, fileName);
                             }
                         }
 
                     }else{
-
+                        //TODO: for extending the work
                         if (singleton.hwAPICalls.keySet().contains(methodCallNameExtended)) {
                             //Case 2: hardware APIs
                         }else if (singleton.jointRedAPICalls.keySet().contains(methodCallNameExtended)) {
@@ -655,41 +761,68 @@ public class DroidEC extends AnAction {
         }
 
         if (parent != null) {
-            int lineNumber; // Holds the exact line number of the API call
-            if (importLogStatementAvailable){
-                lineNumber = getLineNumber(parent) + 1;
-            }else {
-                lineNumber = getLineNumber(parent) + 3;
-            }
+            if (!methodCallName.equals("finish") && !methodCallName.equals("startActivityForResult")) {
 
-            //String logStatement = "Log.d(\"" + Logging_TAG + "\", \"" + methodCallName + ", File: " + javaFile + ", Line number is " + lineNumber + "\");";
-            String logStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodCallName + "," + javaFile + "," + lineNumber + ")\");";
-            PsiStatement logStatementElement = factory.createStatementFromText(logStatement,expression.getContext());
+                int lineNumber; // Holds the exact line number of the API call
+                if (importLogStatementAvailable){
+                    lineNumber = getLineNumber(parent) + 1;
+                }else {
+                    lineNumber = getLineNumber(parent) + 3;
+                }
 
-            //The semicolon should be in one of the leaf nodes
-            PsiElement semicolon = PsiTreeUtil.nextLeaf(parent);
+                //String logStatement = "Log.d(\"" + Logging_TAG + "\", \"" + methodCallName + ", File: " + javaFile + ", Line number is " + lineNumber + "\");";
+                String logStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodCallName + "," + javaFile + "," + lineNumber + ")\");";
+                PsiStatement logStatementElement = factory.createStatementFromText(logStatement,expression.getContext());
 
-            //Finds the semicolon which is in the end of the method call expression
-            while (semicolon != null && !(semicolon instanceof PsiJavaToken && ((PsiJavaToken) semicolon).getTokenType() == JavaTokenType.SEMICOLON)) {
-                //semicolon = PsiTreeUtil.nextLeaf(semicolon);
-                semicolon = PsiTreeUtil.prevLeaf(semicolon);
-            }
+                //The semicolon should be in one of the leaf nodes
+                PsiElement semicolon = PsiTreeUtil.nextLeaf(parent);
 
-            //Creates an enter/white space element
-            PsiElement emptyLine = parserFacade.createWhiteSpaceFromText("\n");
+                //Finds the semicolon which is in the end of the method call expression
+                while (semicolon != null && !(semicolon instanceof PsiJavaToken && ((PsiJavaToken) semicolon).getTokenType() == JavaTokenType.SEMICOLON)) {
+                    //semicolon = PsiTreeUtil.nextLeaf(semicolon);
+                    semicolon = PsiTreeUtil.prevLeaf(semicolon);
+                }
 
-            //writes the statement and the white space to the right place in the Psi tree
-            PsiElement finalInsertionPoint = semicolon.getParent();
-            PsiElement finalSemicolon = semicolon;
-            CodeStyleManager codeStyleManager = CodeStyleManager.getInstance(project);
-            WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {finalInsertionPoint.addAfter(logStatementElement,finalSemicolon);});
-            //TODO: change adding white sapace manually. We should not do that beased on: https://plugins.jetbrains.com/docs/intellij/modifying-psi.html#whitespaces-and-imports
-            WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {finalInsertionPoint.addAfter(emptyLine, finalSemicolon);});
+                //Creates an enter/white space element
+                PsiElement emptyLine = parserFacade.createWhiteSpaceFromText("\n");
+
+                //writes the statement and the white space to the right place in the Psi tree
+                PsiElement finalInsertionPoint = semicolon.getParent();
+                PsiElement finalSemicolon = semicolon;
+                CodeStyleManager codeStyleManager = CodeStyleManager.getInstance(project);
+                WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {finalInsertionPoint.addAfter(logStatementElement,finalSemicolon);});
+                //TODO: change adding white sapace manually. We should not do that beased on: https://plugins.jetbrains.com/docs/intellij/modifying-psi.html#whitespaces-and-imports
+                WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {finalInsertionPoint.addAfter(emptyLine, finalSemicolon);});
 //            WriteCommandAction.runWriteCommandAction(project,(Runnable) () -> {codeStyleManager.reformatNewlyAddedElement((ASTNode) logStatementElement.getParent().getNode(),logStatementElement.getNode());});
 //            WriteCommandAction.runWriteCommandAction(project,(Runnable) () -> {codeStyleManager.reformatNewlyAddedElement(psiFile.getNode(), finalInsertionPoint.getNode());});
-        }else {
+
+            }else {
+                //Log statement should be added before finish, startActivityForResult, and .... MAYBE FOUND IN THE FUTURE
+
+                int lineNumber; // Holds the exact line number of the API call
+                if (importLogStatementAvailable){
+                    lineNumber = getLineNumber(parent) + 2;
+                }else {
+                    lineNumber = getLineNumber(parent) + 4;
+                }
+
+                String logStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodCallName + "," + javaFile + "," + lineNumber + ")\");";
+                PsiStatement logStatementElement = factory.createStatementFromText(logStatement,expression.getContext());
+
+
+                PsiElement target = parent.getParent();
+                PsiElement parentElement = parent;
+                WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {target.addBefore(logStatementElement,parentElement);});
+
+            }
+
+        }else{
             System.out.println("[GreenMeter -> logFindViewById$ Fatal error: Method call expression is null: There is not any method call!");
         }
+
+
+
+
     }
 
     private void addTimeStamp(PsiMethodCallExpression expression, String methodCallName, String javaFile) {

@@ -27,9 +27,16 @@ public class MyToolWindowUpdater {
     }
 
     public void refreshToolWindow() {
-        ToolWindow toolWindow = ToolWindowManager.getInstance(project).getToolWindow("TestingToolWindow");
-        if (toolWindow != null) {
-            LogcatAnalyzerToolWindowFactory.refreshToolWindow();
+
+        if (!project.isDisposed()) {
+            ToolWindow toolWindow = ToolWindowManager.getInstance(project).getToolWindow("TestingToolWindow");
+            if (toolWindow != null) {
+                LogcatAnalyzerToolWindowFactory.refreshToolWindow();
+            }
+        }else {
+            return;
         }
+
+
     }
 }

@@ -323,6 +323,11 @@ public class LogCatReader implements Runnable {
                                 long selfTime = totalTime - methodInfo.getNestedTime();
                                 long selfTimeSeconds = selfTime / 1000;
 
+                                if (!stack.isEmpty()) {
+                                    Long updatedNestedTime = stack.peek().getNestedTime() + totalTime;;
+                                    stack.peek().setNestedTime(updatedNestedTime);
+                                }
+
                                 //Extract elements
                                 String firstElement = getFirstElementOfLogStatement(line);
                                 String secondElement = getSecondElementOfLogStatement(line);
@@ -404,6 +409,10 @@ public class LogCatReader implements Runnable {
 
                                 //API calls
                                 Double energy = Singleton.methodsAPICallsTotalEnergyCostMap.get(key);
+                                if (energy == null){
+                                    //System.out.println("[GreenEdge -> LogCatReader$ Energy is null for " + key.getPart1() + ", " + key.getPart2() + "]");
+                                    energy = 0.0;
+                                }
 
                                 if (currentMethodEnergyUsageMap.isEmpty()) {
                                     currentMethodEnergyUsageMap.put(key, energy);
@@ -412,7 +421,12 @@ public class LogCatReader implements Runnable {
 
                                 } else if (currentMethodEnergyUsageMap.containsKey(key)) {
                                     Double oldEnergy = currentMethodEnergyUsageMap.get(key);
+                                    if (oldEnergy == null) {
+                                        //System.out.println("[GreenEdge -> LogCatReader$ oldEnergy is null for " + key.getPart1() + ", " + key.getPart2() + "]");
+                                        oldEnergy = 0.0;
+                                    }
                                     Double newEnergy = oldEnergy + energy;
+                                    //System.out.println("[GreenEdge -> LogCatReader$ Old Energy: " + oldEnergy + "]");
                                     currentMethodEnergyUsageMap.put(key, newEnergy);
                                     Object[] rowData = {key1, key2, newEnergy, hwBatteryConsumptionValue};
                                     LogcatAnalyzerToolWindowFactory.addOrUpdateTableRow(key1,key2,rowData);
