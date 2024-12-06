@@ -1,36 +1,16 @@
 package com.github.lylanv.secdroid.toolWindows;
 
-import com.android.builder.model.v2.AndroidModel;
 import com.android.tools.idea.gradle.project.model.GradleAndroidModel;
-import com.android.tools.idea.gradle.project.sync.AndroidModule;
-import com.android.tools.idea.model.MergedManifestManager;
-import com.android.tools.idea.projectsystem.ProjectSystemUtil;
-import com.android.tools.idea.projectsystem.SourceProviders;
-import com.android.tools.r8.internal.Sy;
 import com.github.lylanv.secdroid.inspections.EventBusManager;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.intellij.ide.highlighter.JavaFileType;
 import com.intellij.openapi.module.ModuleManager;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.roots.ModuleRootManager;
-import com.intellij.openapi.roots.ProjectFileIndex;
-import com.intellij.openapi.roots.ProjectRootManager;
-import com.intellij.openapi.ui.Messages;
-import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowFactory;
-import com.intellij.openapi.wm.ex.ToolWindowManagerListener;
-import com.intellij.psi.*;
-import com.intellij.psi.search.FileTypeIndex;
-import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.content.ContentFactory;
-import com.intellij.util.messages.MessageBusConnection;
 import com.intellij.openapi.module.Module;
-import com.intellij.openapi.module.ModuleManager;
-//import kotlin.reflect.jvm.internal.calls.CallerImpl;
-import org.jetbrains.android.facet.AndroidFacet;
 import org.jetbrains.annotations.NotNull;
 import org.jfree.chart.ChartFactory;
 import org.jfree.chart.ChartPanel;
@@ -136,7 +116,8 @@ public class LogcatAnalyzerToolWindowFactory implements ToolWindowFactory {
 
     private JComponent createTextComponent() {
         if (packageName == null) {
-            textArea = new JTextArea("This is an example text component inside the tool window.");
+            //textArea = new JTextArea("This is an example text component inside the tool window.");
+            textArea = new JTextArea("");
         }else{
             textArea = new JTextArea("Package is: " + packageName);
         }
@@ -197,7 +178,7 @@ public class LogcatAnalyzerToolWindowFactory implements ToolWindowFactory {
     private JComponent createLineGraphComponent() {
 
         // Create a time series for the line graph
-        lineGraphSeries = new TimeSeries("Dynamic Data");
+        lineGraphSeries = new TimeSeries("Battery Consumption");
 
         // Use TimeSeriesCollection as the dataset for JFreeChart's time series chart
         TimeSeriesCollection dataset = new TimeSeriesCollection(lineGraphSeries);
@@ -216,6 +197,8 @@ public class LogcatAnalyzerToolWindowFactory implements ToolWindowFactory {
         return chartPanel;
 
     }
+
+
 
     // Methods to update each component
     public static void updateText(String newText) {
@@ -236,10 +219,10 @@ public class LogcatAnalyzerToolWindowFactory implements ToolWindowFactory {
         barChartDataset.setValue(value, rowKey, columnKey);
     }
 
-
     // Method to update only the vertical axis value on the line graph
     public static void updateLineGraph(Number yValue) {
-        lineGraphSeries.addOrUpdate(new Second(), yValue.doubleValue());  // X-axis is time; only Y value changes
+        //lineGraphSeries.addOrUpdate(new Second(), yValue.doubleValue());  // X-axis is time; only Y value changes
+        lineGraphSeries.addOrUpdate(new Second(new java.util.Date(System.currentTimeMillis())), yValue.doubleValue());  // X-axis is time; only Y value changes
     }
 
     public static void saveResultsToFile(){
@@ -335,7 +318,7 @@ public class LogcatAnalyzerToolWindowFactory implements ToolWindowFactory {
             GradleAndroidModel androidModel = GradleAndroidModel.get(module);
             if (androidModel != null) {
                 String applicationId = androidModel.getApplicationId();
-                //System.out.println("Application ID: " + applicationId);
+                System.out.println("[GreenMeter -> LogcatAnalyzerToolWindowFactory -> getPackageName$ Application ID: " + applicationId);
                 packageName = applicationId;
                 return packageName;
             }

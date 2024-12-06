@@ -18,6 +18,7 @@ public class AndroidProjectExecutionListener implements ExecutionListener{
         EventBusManager.post(new ApplicationStartedEvent(true));
 
         //We call the refreshToolWindow method here because we need to see the data after application running
+        //System.out.println("Process started + " + executorId);
         MyToolWindowUpdater.getInstance(env.getProject()).refreshToolWindow();
     }
 

@@ -265,7 +265,7 @@ public class DroidEC extends AnAction {
 
         if (file != null) {
             // Perform actions with the selected file
-            Messages.showInfoMessage("You selected: " + file.getPath(), "File Selected");
+            Messages.showInfoMessage("You have selected: " + file.getPath(), "File Selected");
         } else {
             Messages.showWarningDialog("No file was selected. Default values will be used for hardware components power usage!", "File Not Selected");
         }
@@ -346,7 +346,9 @@ public class DroidEC extends AnAction {
                                 PsiReferenceExpression methodExpression = methodCall.getMethodExpression();
                                 String lastMethodName = methodExpression.getReferenceName();
 
-                                if (!"finish".equals(lastMethodName) && !"startActivityForResult".equals(lastMethodName)) {
+                                //if (!"finish".equals(lastMethodName) && !"startActivityForResult".equals(lastMethodName)) {
+                                if (!"finish".equals(lastMethodName)) {
+
                                     generateMethodEndLogAndAdd(methodName, className, psiMethod, methodBody);
 
                                 } else {
@@ -361,6 +363,15 @@ public class DroidEC extends AnAction {
                                     });
                                 }
                             }
+                        }else if (lastStatement instanceof PsiReturnStatement){
+                            //Generate the method end log statement
+                            String endLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodName + "," + className + "," + MethodEnd_TAG + ")\");";
+                            PsiStatement endLogStatementElement = factory.createStatementFromText(endLogStatement, psiMethod);
+
+                            // Insert the log statement before the finish() call
+                            WriteCommandAction.runWriteCommandAction(project, () -> {
+                                methodBody.addBefore(endLogStatementElement, lastStatement);
+                            });
                         }else {
                             generateMethodEndLogAndAdd(methodName, className, psiMethod, methodBody);
                         }

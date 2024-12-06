@@ -21,6 +21,8 @@ public class MethodInfo {
     Map<String, Integer[]> networkPackets_start = new HashMap<>();
 
 
+    private double batteryCharge = 0;
+
     public MethodInfo(String methodName, String className, long startTime, boolean cameraStatus_start, boolean gpsStatus_start, boolean screen_start, int screenBrightness_start, boolean bluetoothStatus_start, Map<String, Integer[]> networkPackets_start) {
         this.methodName = methodName;
         this.className = className;
@@ -33,6 +35,16 @@ public class MethodInfo {
         this.screenBrightness_start = screenBrightness_start;
         this.bluetoothStatus_start = bluetoothStatus_start;
         this.networkPackets_start = networkPackets_start;
+    }
+
+
+    public MethodInfo(String methodName, String className, long startTime, double batteryCharge) {
+        this.methodName = methodName;
+        this.className = className;
+        this.startTime = startTime;
+        this.nestedTime = 0;
+
+        this.batteryCharge = batteryCharge;
     }
 
 
@@ -80,5 +92,12 @@ public class MethodInfo {
         return networkPackets_start;
     }
 
+    public double getBatteryCharge() {
+        return batteryCharge;
+    }
+
+    public void setBatteryCharge(double batteryCharge) {
+        this.batteryCharge = batteryCharge;
+    }
 
 }

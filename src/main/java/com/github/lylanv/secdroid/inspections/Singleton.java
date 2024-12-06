@@ -34,20 +34,23 @@ public class Singleton {
         //redAPICalls.clear();
 
         //Activity and Context
-        redAPICalls.put("performClick",1.0); // android.view.View.performClick() & android.widget.CompoundButton.performClick()
+        redAPICalls.put("onCreate",0.00039); //NOT REAL, NOT RED API CALL
+        redAPICalls.put("performClick",0.00000000349246); // android.view.View.performClick() & android.widget.CompoundButton.performClick()
         redAPICalls.put("performItemClick",1.0);
         redAPICalls.put("CrashInfo",1.0);
         redAPICalls.put("dispatchWindowFocusChanged",1.0);
         redAPICalls.put("onChange",1.0);
         redAPICalls.put("sendAccessibilityEvent",1.0);
         redAPICalls.put("getInt",1.0);
-        redAPICalls.put("getIntExtra",1.0);
+        redAPICalls.put("getStringExtra",0.000000000167638); //NOT REAL
+        redAPICalls.put("getIntExtra", 0.000000000167638);
+        redAPICalls.put("putExtra", 0.000000000167638); //NOT REAL, NOT RED API CALL
         redAPICalls.put("i",1.0);
-        redAPICalls.put("d",1.0); //NOT RED API CALL
-        redAPICalls.put("finish",1.0);
+        redAPICalls.put("d",0.000000000176); //NOT REAL, NOT RED API CALL
+        redAPICalls.put("finish",0.00039); //NOT REAL
         redAPICalls.put("cancelAll",1.0);
-        redAPICalls.put("startActivityForResult",1.0);
-        redAPICalls.put("findViewById",1.0);
+        redAPICalls.put("startActivityForResult",0.00043137);
+        redAPICalls.put("findViewById",0.0000000000256114);
         redAPICalls.put("getPhoneType",1.0);
         redAPICalls.put("writeBundle",1.0);
         redAPICalls.put("clear",1.0);
@@ -95,7 +98,7 @@ public class Singleton {
         redAPICalls.put("getCellLocation",1.0);
 
         //GUI Manipulation
-        redAPICalls.put("setContentView",1.0);
+        redAPICalls.put("setContentView",0.000016);
         redAPICalls.put("show",1.0);
         redAPICalls.put("setComposingText",1.0);
         redAPICalls.put("makeText",1.0);
@@ -115,7 +118,8 @@ public class Singleton {
         //redAPICalls.put("addView",1.0);
         redAPICalls.put("setPressed",1.0);
         //redAPICalls.put("findViewById",1.0); // Repetitive - android.view.Window.findViewById(int)---
-        redAPICalls.put("setText",1.0);
+        redAPICalls.put("setText",0.00000000349246);
+        redAPICalls.put("getText",0.00000000349246);//NOT REAL, NOT RED API CALL
         redAPICalls.put("getTextBounds",1.0);
         redAPICalls.put("focusableViewAvailable",1.0);
         redAPICalls.put("dismiss",1.0);

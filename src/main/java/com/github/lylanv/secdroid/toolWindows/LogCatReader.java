@@ -63,7 +63,12 @@ public class LogCatReader implements Runnable {
 
     public LogCatReader() {
         this.timer = new Timer();
-        applicationPackageName = LogcatAnalyzerToolWindowFactory.getPackageName();
+
+        //ERROR
+        while (applicationPackageName == null) {
+            applicationPackageName = LogcatAnalyzerToolWindowFactory.getPackageName();
+        }
+
 
         updateLineGraph(); // I called it here to have it as an ongoing continuous graph
     }
@@ -192,6 +197,7 @@ public class LogCatReader implements Runnable {
             }
 
             if (AdbUtils.isEmulatorBooted()) {
+
                 System.out.println("[GreenEdge -> LogCatReader$ Emulator Booted]");
                 //Get battery level
                 batteryLevel = AdbUtils.getEmulatorBatteryLevel();
@@ -273,6 +279,7 @@ public class LogCatReader implements Runnable {
                             if (batteryLevel >= 0){
                                 LogcatAnalyzerToolWindowFactory.updateText(extractedInfo); //Update text area
                                 LogcatAnalyzerToolWindowFactory.updateLineGraph(energyConsumption); //Update the line graph
+
                                 LogcatAnalyzerToolWindowFactory.updateBarChart(redAPIsCount.getOrDefault(extractedAPICallName,1),extractedAPICallName,extractedAPICallName); //Update the bar chart
                             } else {
                                 AdbUtils.stopEmulator();
@@ -287,8 +294,9 @@ public class LogCatReader implements Runnable {
                                 String secondElement = getSecondElementOfLogStatement(line);
 
                                 //To calculate the energy consumption of hardware components for methods
-                                MethodInfo methodInfo = new MethodInfo(firstElement,secondElement,System.currentTimeMillis(), AdbUtils.isCameraOn(),AdbUtils.isUsingGPS(applicationPackageName),
-                                        AdbUtils.isScreenOn(),AdbUtils.getScreenBrightnessLevel(),AdbUtils.isBluetoothConnected(),checkNetwork(applicationPackageName));
+//                                MethodInfo methodInfo = new MethodInfo(firstElement,secondElement,System.currentTimeMillis(), AdbUtils.isCameraOn(),AdbUtils.isUsingGPS(applicationPackageName),
+//                                        AdbUtils.isScreenOn(),AdbUtils.getScreenBrightnessLevel(),AdbUtils.isBluetoothConnected(),checkNetwork(applicationPackageName));
+                                MethodInfo methodInfo = new MethodInfo(firstElement,secondElement,System.currentTimeMillis(), batteryLevel);
                                 stack.push(methodInfo);
 
 
@@ -323,6 +331,8 @@ public class LogCatReader implements Runnable {
                                 long selfTime = totalTime - methodInfo.getNestedTime();
                                 long selfTimeSeconds = selfTime / 1000;
 
+                                double batteryChargeStamp = methodInfo.getBatteryCharge();
+
                                 if (!stack.isEmpty()) {
                                     Long updatedNestedTime = stack.peek().getNestedTime() + totalTime;;
                                     stack.peek().setNestedTime(updatedNestedTime);
@@ -342,37 +352,54 @@ public class LogCatReader implements Runnable {
                                     hwBatteryConsumptionValue = hwBatteryConsumption.get(key);
                                 }
 
+                                double batteryChargeHelper = 0;
+
                                 // Camera
                                 if (AdbUtils.isCameraOn() || methodInfo.isCameraStatusStart()){
 
-                                    hwBatteryConsumptionValue += batteryPercentage(PowerXML.getCameraAvg(),selfTimeSeconds);
+                                    hwBatteryConsumptionValue += batteryPercentage(PowerXML.getCameraAvg(),selfTimeSeconds,batteryChargeStamp);
 
-                                    //TODO: check with prof. Paulo that if I need to consider screen energy consumption when camera is on!
-                                    int brightnessLevelOfScreen = AdbUtils.getScreenBrightnessLevel();
-                                    if (brightnessLevelOfScreen != -1){
-                                        hwBatteryConsumptionValue += (batteryPercentage(PowerXML.getScreenOn(), selfTimeSeconds) + batteryPercentage((PowerXML.getScreenFull() * (brightnessLevelOfScreen) / 255), selfTime));
-                                    }else {
-                                        hwBatteryConsumptionValue += (batteryPercentage(PowerXML.getScreenOn(), selfTimeSeconds));
-                                    }
+                                    batteryChargeHelper = batteryPercentage(PowerXML.getCameraAvg(),selfTimeSeconds,batteryChargeStamp);
+                                    batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
+
+//                                    //TODO: check with prof. Paulo that if I need to consider screen energy consumption when camera is on!
+//                                    int brightnessLevelOfScreen = AdbUtils.getScreenBrightnessLevel();
+//                                    if (brightnessLevelOfScreen != -1){
+//                                        hwBatteryConsumptionValue += (batteryPercentage(PowerXML.getScreenOn(), selfTimeSeconds) + batteryPercentage((PowerXML.getScreenFull() * (brightnessLevelOfScreen) / 255), selfTime));
+//                                    }else {
+//                                        hwBatteryConsumptionValue += (batteryPercentage(PowerXML.getScreenOn(), selfTimeSeconds));
+//                                    }
                                 }
 
                                 //GPS
                                 if (AdbUtils.isUsingGPS(applicationPackageName) || methodInfo.isCameraStatusStart()){
-                                    hwBatteryConsumptionValue += batteryPercentage(PowerXML.getGpsOn(),selfTimeSeconds);
+                                    hwBatteryConsumptionValue += batteryPercentage(PowerXML.getGpsOn(),selfTimeSeconds,batteryChargeStamp);
+
+                                    batteryChargeHelper = batteryPercentage(PowerXML.getCameraAvg(),selfTimeSeconds,batteryChargeStamp);
+                                    batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
                                 }
 
                                 //Screen
                                 if (AdbUtils.isScreenOn() || methodInfo.isCameraStatusStart()){
                                     int brightnessLevelOfScreen = AdbUtils.getScreenBrightnessLevel();
                                     if (brightnessLevelOfScreen != -1){
-                                        hwBatteryConsumptionValue += (batteryPercentage(PowerXML.getScreenOn(), selfTimeSeconds) + batteryPercentage((PowerXML.getScreenFull() * (brightnessLevelOfScreen) / 255), selfTime));
+                                        hwBatteryConsumptionValue += (batteryPercentage(PowerXML.getScreenOn(), selfTimeSeconds,batteryChargeStamp) + batteryPercentage((PowerXML.getScreenFull() * (brightnessLevelOfScreen) / 255), selfTime, batteryChargeStamp));
+
+                                        batteryChargeHelper = batteryPercentage(PowerXML.getCameraAvg(),selfTimeSeconds,batteryChargeStamp);
+                                        batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
                                     }else {
-                                        hwBatteryConsumptionValue += (batteryPercentage(PowerXML.getScreenOn(), selfTimeSeconds));
+                                        hwBatteryConsumptionValue += (batteryPercentage(PowerXML.getScreenOn(), selfTimeSeconds,batteryChargeStamp));
+
+                                        batteryChargeHelper = batteryPercentage(PowerXML.getCameraAvg(),selfTimeSeconds,batteryChargeStamp);
+                                        batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
                                     }
                                 }
                                 //Bluetooth
                                 if (AdbUtils.isBluetoothConnected() || methodInfo.isCameraStatusStart()){
-                                    hwBatteryConsumptionValue += batteryPercentage(PowerXML.getBluetoothActive(),selfTimeSeconds);
+                                    hwBatteryConsumptionValue += batteryPercentage(PowerXML.getBluetoothActive(),selfTimeSeconds,batteryChargeStamp);
+
+                                    batteryChargeHelper = batteryPercentage(PowerXML.getCameraAvg(),selfTimeSeconds,batteryChargeStamp);
+                                    batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
                                 }
                                 //Network
                                 if (methodInfo.getNetworkPacketsStart() != null){
@@ -390,9 +417,15 @@ public class LogCatReader implements Runnable {
                                                             //wlan0 -> Wi-Fi
                                                             //eth0 -> cellular data
                                                             if (entryCurrent.getKey().contains("wlan0")){ // Wi-Fi
-                                                                hwBatteryConsumptionValue += batteryPercentage(PowerXML.getWifiActive(),selfTimeSeconds);
+                                                                hwBatteryConsumptionValue += batteryPercentage(PowerXML.getWifiActive(),selfTimeSeconds,batteryChargeStamp);
+
+                                                                batteryChargeHelper = batteryPercentage(PowerXML.getCameraAvg(),selfTimeSeconds,batteryChargeStamp);
+                                                                batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
                                                             }else if (entryCurrent.getKey().contains("eth0")){// Cellular data
-                                                                hwBatteryConsumptionValue += batteryPercentage(PowerXML.getRadioActive(),selfTimeSeconds);
+                                                                hwBatteryConsumptionValue += batteryPercentage(PowerXML.getRadioActive(),selfTimeSeconds,batteryChargeStamp);
+
+                                                                batteryChargeHelper = batteryPercentage(PowerXML.getCameraAvg(),selfTimeSeconds,batteryChargeStamp);
+                                                                batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
                                                             }
                                                         }
                                                     }
@@ -598,13 +631,13 @@ public class LogCatReader implements Runnable {
                             batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getCameraAvg());
                             System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$ CAMERA -> batteryLevel " + batteryLevel);
 
-                            //TODO: check with prof. Paulo that if I need to consider screen energy consumption when camera is on!
-                            int brightnessLevelOfScreen = AdbUtils.getScreenBrightnessLevel();
-                            if (brightnessLevelOfScreen != -1){
-                                batteryLevel = batteryLevel - (batteryPercentageInOneSecond(PowerXML.getScreenOn()) + batteryPercentageInOneSecond((PowerXML.getScreenFull() * (brightnessLevelOfScreen)/255)));
-                            }else {
-                                batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getScreenOn());
-                            }
+//                            //TODO: check with prof. Paulo that if I need to consider screen energy consumption when camera is on!
+//                            int brightnessLevelOfScreen = AdbUtils.getScreenBrightnessLevel();
+//                            if (brightnessLevelOfScreen != -1){
+//                                batteryLevel = batteryLevel - (batteryPercentageInOneSecond(PowerXML.getScreenOn()) + batteryPercentageInOneSecond((PowerXML.getScreenFull() * (brightnessLevelOfScreen)/255)));
+//                            }else {
+//                                batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getScreenOn());
+//                            }
                         }
 
                         //Screen battery consumption
@@ -668,6 +701,7 @@ public class LogCatReader implements Runnable {
 
 
                         LogcatAnalyzerToolWindowFactory.updateLineGraph(batteryLevel);
+
                     }
 
                 }
@@ -755,10 +789,10 @@ public class LogCatReader implements Runnable {
 
     }
 
-    private double batteryPercentage(double inMilliAmpSecond, double duration) {
+    private double batteryPercentage(double inMilliAmpSecond, double duration, double batteryChargeStamp) {
 
         //Battery capacity = 6000 mAh = 21600000 mAs -> 100% battery charge and 100% battery health
-        return  (100*inMilliAmpSecond*duration)/((PowerXML.getStateOfHealth()/100) * (batteryLevel/100) * (PowerXML.getBatteryCapacity()*3600));
+        return  (100*inMilliAmpSecond*duration)/((PowerXML.getStateOfHealth()/100) * (batteryChargeStamp/100) * (PowerXML.getBatteryCapacity()*3600));
 
     }
 
