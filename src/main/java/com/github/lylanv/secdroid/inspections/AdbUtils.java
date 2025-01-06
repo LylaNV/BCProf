@@ -452,7 +452,7 @@ public class AdbUtils {
                         counterGPS++;
                     }
 
-                    //If both are visisted we can stop the loop because the result is achieved and false should be returned
+                    //If both are visited we can stop the loop because the result is achieved and false should be returned
                     if (counterGPS >= 1 && counterAPK >= 1) {
                         break;
                     }
@@ -571,7 +571,7 @@ public class AdbUtils {
         }
     }
 
-    public static int getScreenBrightnessLevel(){
+    public static double getScreenBrightnessLevel(){
 
         try {
             ProcessBuilder pb = new ProcessBuilder(adbPath, "shell", "settings", "get", "system", "screen_brightness");
@@ -585,7 +585,7 @@ public class AdbUtils {
 
                     if (!line.isEmpty()) {
                         reader.close();
-                        return Integer.parseInt(line);
+                        return Double.parseDouble(line);
                     }
 
                 }

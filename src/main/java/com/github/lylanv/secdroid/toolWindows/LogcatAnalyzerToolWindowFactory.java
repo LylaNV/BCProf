@@ -164,7 +164,7 @@ public class LogcatAnalyzerToolWindowFactory implements ToolWindowFactory {
         barChartDataset = new DefaultCategoryDataset();
 
         JFreeChart chart = ChartFactory.createBarChart(
-                "Red API Calls Count",
+                "API Calls Count",
                 "Category",
                 "Count",
                 barChartDataset, PlotOrientation.VERTICAL,

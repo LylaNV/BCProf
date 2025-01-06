@@ -42,15 +42,15 @@ public class Singleton {
         redAPICalls.put("onChange",1.0);
         redAPICalls.put("sendAccessibilityEvent",1.0);
         redAPICalls.put("getInt",1.0);
-        redAPICalls.put("getStringExtra",0.000000000167638); //NOT REAL
+        redAPICalls.put("getStringExtra",0.000000000139699);
         redAPICalls.put("getIntExtra", 0.000000000167638);
         redAPICalls.put("putExtra", 0.000000000167638); //NOT REAL, NOT RED API CALL
-        redAPICalls.put("i",1.0);
+        redAPICalls.put("i",0.000000000176); //NOT REAL, NOT RED API CALL
         redAPICalls.put("d",0.000000000176); //NOT REAL, NOT RED API CALL
         redAPICalls.put("finish",0.00039); //NOT REAL
         redAPICalls.put("cancelAll",1.0);
-        redAPICalls.put("startActivityForResult",0.00043137);
-        redAPICalls.put("findViewById",0.0000000000256114);
+        redAPICalls.put("startActivityForResult",0.00041215);
+        redAPICalls.put("findViewById",0.0000000000256114); //2,56E-11
         redAPICalls.put("getPhoneType",1.0);
         redAPICalls.put("writeBundle",1.0);
         redAPICalls.put("clear",1.0);
@@ -98,7 +98,7 @@ public class Singleton {
         redAPICalls.put("getCellLocation",1.0);
 
         //GUI Manipulation
-        redAPICalls.put("setContentView",0.000016);
+        redAPICalls.put("setContentView",0.0000136); //1,36085E-05
         redAPICalls.put("show",1.0);
         redAPICalls.put("setComposingText",1.0);
         redAPICalls.put("makeText",1.0);
@@ -172,7 +172,7 @@ public class Singleton {
         redAPICalls.put("dispatchMessage",1.0);
         redAPICalls.put("setNotificationUri",1.0);
         redAPICalls.put("getEnabledAccessibilityServiceList",1.0);
-        redAPICalls.put("e",1.0);
+        redAPICalls.put("e",0.000000000176); //NOT REAL, NOT RED API CALL
 
         //Web
         redAPICalls.put("WebView",1.0);

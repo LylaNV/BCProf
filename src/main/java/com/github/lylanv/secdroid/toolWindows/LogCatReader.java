@@ -50,6 +50,10 @@ public class LogCatReader implements Runnable {
     private boolean cameraStatus_initial = false;
     private boolean cameraStatus_current = false;
 
+    // TEST
+    private double batteryStamp = 0;
+    private boolean batteryChangedFlag = false;
+
 
     String applicationPackageName;
 
@@ -69,7 +73,7 @@ public class LogCatReader implements Runnable {
             applicationPackageName = LogcatAnalyzerToolWindowFactory.getPackageName();
         }
 
-
+        //TEST : Commented
         updateLineGraph(); // I called it here to have it as an ongoing continuous graph
     }
 
@@ -273,12 +277,20 @@ public class LogCatReader implements Runnable {
                              *  click the action button add log lines!!!
                              *  Consider to correct this!
                              * */
-                            energyConsumption = batteryLevel - Singleton.redAPICalls.get(extractedAPICallName);
-                            batteryLevel = energyConsumption;
 
-                            if (batteryLevel >= 0){
+                            //TEST = Commented
+                            energyConsumption = batteryLevel - Singleton.redAPICalls.get(extractedAPICallName);
+//                            batteryLevel = energyConsumption;
+
+                            //TEST
+                            if (energyConsumption >= 0){
+                            //if (batteryLevel >= 0){
                                 LogcatAnalyzerToolWindowFactory.updateText(extractedInfo); //Update text area
-                                LogcatAnalyzerToolWindowFactory.updateLineGraph(energyConsumption); //Update the line graph
+
+                                //TEST
+                                //LogcatAnalyzerToolWindowFactory.updateLineGraph(energyConsumption); //Update the line graph
+                                batteryChangedFlag = true;
+                                batteryStamp = batteryStamp + Singleton.redAPICalls.get(extractedAPICallName);;
 
                                 LogcatAnalyzerToolWindowFactory.updateBarChart(redAPIsCount.getOrDefault(extractedAPICallName,1),extractedAPICallName,extractedAPICallName); //Update the bar chart
                             } else {
@@ -381,12 +393,13 @@ public class LogCatReader implements Runnable {
 
                                 //Screen
                                 if (AdbUtils.isScreenOn() || methodInfo.isCameraStatusStart()){
-                                    int brightnessLevelOfScreen = AdbUtils.getScreenBrightnessLevel();
+                                    double brightnessLevelOfScreen = AdbUtils.getScreenBrightnessLevel();
                                     if (brightnessLevelOfScreen != -1){
                                         hwBatteryConsumptionValue += (batteryPercentage(PowerXML.getScreenOn(), selfTimeSeconds,batteryChargeStamp) + batteryPercentage((PowerXML.getScreenFull() * (brightnessLevelOfScreen) / 255), selfTime, batteryChargeStamp));
 
                                         batteryChargeHelper = batteryPercentage(PowerXML.getCameraAvg(),selfTimeSeconds,batteryChargeStamp);
                                         batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
+
                                     }else {
                                         hwBatteryConsumptionValue += (batteryPercentage(PowerXML.getScreenOn(), selfTimeSeconds,batteryChargeStamp));
 
@@ -504,6 +517,7 @@ public class LogCatReader implements Runnable {
 
     //Cancel timer and clear the variables, LogCat file, and all components in the tool window
     public void stop() {
+
         running = false;
 
         if (updatingFlag) {
@@ -525,9 +539,31 @@ public class LogCatReader implements Runnable {
             networkCurrentUsageMap.clear();
         }
         //NOT TESTED
+        gpsStatus_initial = false;
+        gpsStatus_current = false;
+
+        displayStatus_initial = false;
+        displayStatus_current = false;
+
+        cameraStatus_initial = false;
+        cameraStatus_current = false;
+
+
+        // These variables are added to be able to calculate the energy consumption of HW components for each method
+        if (stack!=null){stack = null;}
+        if (methodTimes!=null){methodTimes = new HashMap<>();}
+        if (hwBatteryConsumption!=null){hwBatteryConsumption = null;}
+
+        if (currentMethodEnergyUsageMap!=null){currentMethodEnergyUsageMap = null;}
+
+        if (redAPIsCount != null){redAPIsCount = null;}
 
         energyConsumption = 0;
         batteryLevel = 0;
+
+        //TEST
+        batteryStamp = 0;
+        batteryChangedFlag = false;
 
         timer.cancel();
 
@@ -626,6 +662,13 @@ public class LogCatReader implements Runnable {
 
                     if (batteryLevel > 0 ) {
 
+                        //TEST
+                        if (batteryChangedFlag){
+                            batteryChangedFlag = false;
+                            batteryLevel = batteryLevel - batteryStamp;
+                            batteryStamp = 0;
+                        }
+
                         //Camera battery consumption
                         if (AdbUtils.isCameraOn()){
                             batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getCameraAvg());
@@ -642,7 +685,7 @@ public class LogCatReader implements Runnable {
 
                         //Screen battery consumption
                         if (AdbUtils.isAppCurrentFocusOFScreen(applicationPackageName)){
-                            int brightnessLevelOfScreen = AdbUtils.getScreenBrightnessLevel();
+                            double brightnessLevelOfScreen = AdbUtils.getScreenBrightnessLevel();
                             if (brightnessLevelOfScreen != -1){
                                 batteryLevel = batteryLevel - (batteryPercentageInOneSecond(PowerXML.getScreenOn()) + batteryPercentageInOneSecond((PowerXML.getScreenFull() * (brightnessLevelOfScreen)/255)));
                             }else {
@@ -784,15 +827,25 @@ public class LogCatReader implements Runnable {
 
     private double batteryPercentageInOneSecond(double inMilliAmpSecond) {
 
+//        //Battery capacity = 6000 mAh = 21600000 mAs -> 100% battery charge and 100% battery health
+//        return  (100*inMilliAmpSecond)/((PowerXML.getStateOfHealth()/100) * (batteryLevel/100) * (PowerXML.getBatteryCapacity()*3600));
+
+        //TEST COMMENTED
         //Battery capacity = 6000 mAh = 21600000 mAs -> 100% battery charge and 100% battery health
-        return  (100*inMilliAmpSecond)/((PowerXML.getStateOfHealth()/100) * (batteryLevel/100) * (PowerXML.getBatteryCapacity()*3600));
+        //return  (100 * inMilliAmpSecond)/((PowerXML.getStateOfHealth()/100) * (batteryLevel/100) * (PowerXML.getBatteryCapacity()*3600));
+        return  (100 * inMilliAmpSecond)/((PowerXML.getStateOfHealth()/100) * (PowerXML.getBatteryCapacity()*3600));
 
     }
 
     private double batteryPercentage(double inMilliAmpSecond, double duration, double batteryChargeStamp) {
 
+//        //Battery capacity = 6000 mAh = 21600000 mAs -> 100% battery charge and 100% battery health
+//        return  (100*inMilliAmpSecond*duration)/((PowerXML.getStateOfHealth()/100) * (batteryChargeStamp/100) * (PowerXML.getBatteryCapacity()*3600));
+
+        //TEST COMMENTED
         //Battery capacity = 6000 mAh = 21600000 mAs -> 100% battery charge and 100% battery health
-        return  (100*inMilliAmpSecond*duration)/((PowerXML.getStateOfHealth()/100) * (batteryChargeStamp/100) * (PowerXML.getBatteryCapacity()*3600));
+        //return  (100*inMilliAmpSecond*duration)/((PowerXML.getStateOfHealth()/100) * (batteryChargeStamp/100) * (PowerXML.getBatteryCapacity()*3600));
+        return  (100*inMilliAmpSecond*duration)/((PowerXML.getStateOfHealth()/100) * (PowerXML.getBatteryCapacity()*3600));
 
     }
 
