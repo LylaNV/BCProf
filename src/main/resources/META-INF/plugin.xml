@@ -7,9 +7,9 @@
     <depends>com.intellij.modules.platform</depends>
     <depends>org.jetbrains.android</depends>
     <depends>com.android.tools.idea.smali</depends>
-    <depends>com.intellij.java</depends>
+    <depends>com.intellij.modules.java-capable</depends>
     <depends>com.intellij.modules.androidstudio</depends>
-<!--    <depends>com.android.tools.design</depends>-->
+    <depends>com.android.tools.design</depends>
 
     <resource-bundle>messages.MyBundle</resource-bundle>
 

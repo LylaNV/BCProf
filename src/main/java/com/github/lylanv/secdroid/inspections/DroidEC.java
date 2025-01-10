@@ -9,6 +9,7 @@ import com.intellij.openapi.fileChooser.FileChooser;
 import com.intellij.openapi.fileChooser.FileChooserDescriptor;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.wm.ToolWindow;
+import com.intellij.util.indexing.FileBasedIndex;
 import org.jetbrains.annotations.NotNull;
 
 import com.intellij.ide.highlighter.JavaFileType;
@@ -23,6 +24,7 @@ import com.intellij.psi.codeStyle.CodeStyleManager;
 import com.intellij.psi.search.FileTypeIndex;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.PsiTreeUtil;
+import org.jetbrains.kotlin.psi.*;
 
 import java.util.*;
 
@@ -37,6 +39,7 @@ public class DroidEC extends AnAction {
     PsiClass[] psiClasses; //Holds the classes in the project
     PsiMethod[] psiMethods; //Holds the list of the methods in the project
     PsiElementFactory factory; //Holds PsiElementFactory
+    KtPsiFactory factoryKotlin;
     PsiAnnotation annotation; //Holds annotation
     PsiDirectory projectDirectory; //Holds the project directory
     ImportChecker importChecker; //Holds an instance of ImportChecker class -> this variable is used to check the list of the imports in the project and add any missing one
@@ -55,7 +58,7 @@ public class DroidEC extends AnAction {
     @Override
     public void actionPerformed(@NotNull AnActionEvent event) {
 
-        System.out.println("[GreenMeter -> actionPerformed$ GreenMeter button is clicked");
+        System.out.println("[GreenMeter -> actionPerformed$ SECDroid button is clicked");
 
 
         //fillRedAPICallsSet();
@@ -91,6 +94,8 @@ public class DroidEC extends AnAction {
 
         //Gets the PsiElement Factory
         factory = JavaPsiFacade.getElementFactory(project);
+        //Gets KtPsiFactory for kotlin
+        factoryKotlin = new KtPsiFactory(project);
 
         //Gets the PSI manager
         psiManager = PsiManager.getInstance(project);
@@ -164,7 +169,8 @@ public class DroidEC extends AnAction {
         * containingFiles = FileBasedIndex.getInstance().getContainingFiles(FileTypeIndex.NAME, JavaFileType.INSTANCE, GlobalSearchScope.projectScope(project));
         * Since FileTypeIndex.NAME is deprecated, it is replaced by following line of code.
         * */
-        containingFiles = FileTypeIndex.getFiles(JavaFileType.INSTANCE, GlobalSearchScope.projectScope(project));
+        //containingFiles = FileTypeIndex.getFiles(JavaFileType.INSTANCE, GlobalSearchScope.projectScope(project));
+        containingFiles = getAllJavaAndKotlinFiles(project);
 
         if (containingFiles.toArray().length == 0) {
             System.out.println("[GreenMeter -> actionPerformed$ Fatal error: there is no file in the project!");
@@ -180,13 +186,17 @@ public class DroidEC extends AnAction {
              * */
             if (virtualFile.getUrl().contains("/src/main")){
                 psiClasses = convertVirtualFileToPsiClass(project,virtualFile);
-                if (psiClasses.length == 0) {
-                    System.out.println("[GreenMeter -> actionPerformed$ Could not retrieve the java classes in the project or project does not have any java class.");
+                if (psiClasses == null || psiClasses.length == 0) {
+                    System.out.println("[GreenMeter -> actionPerformed$ Could not retrieve the classes in the file " + virtualFile.getName().trim());
                 }else {
                     //retrieveClasses(psiClasses); //Calls methods that annotate methods - WORKING
                     //Determines if there is any missing import
                     //Be careful, we need to first call the checkImports function then the addLogImportStatement function
                     importLogStatementAvailable = importChecker.checkImports(virtualFile,psiManager);
+
+                    //@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ Lyla : STOP @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+
                     //To detect methods in the code we first need to extract class in the source code
                     logMethodsStart(psiClasses);
 
@@ -198,12 +208,38 @@ public class DroidEC extends AnAction {
                     * Add the import log statement if it is not exist
                     * */
                     if (!importLogStatementAvailable) {
-                        importChecker.addLogImportStatement();
+                        importChecker.addLogImportStatement(virtualFile);
                     }
 
                 }
             }
         }
+    }
+
+
+
+    private Collection<VirtualFile> getAllJavaAndKotlinFiles(Project project) {
+        Collection<VirtualFile> allFiles = new ArrayList<>();
+        FileBasedIndex.getInstance().iterateIndexableFiles(file -> {
+            allFiles.add(file);
+            return true;
+        }, project, null);
+
+        Collection<VirtualFile> filteredFiles = new ArrayList<>();
+        for (VirtualFile file : allFiles) {
+            //Only gets the files inside the project which are in main folder
+            if (file.getUrl().contains("/src/main")){
+                PsiFile psiFileLocal = PsiManager.getInstance(project).findFile(file);
+                if (psiFileLocal != null) {
+                    String languageId = psiFileLocal.getLanguage().getID();
+                    if ("JAVA".equals(languageId) || "kotlin".equals(languageId)) {
+                        filteredFiles.add(file);
+                    }
+                }
+            }
+        }
+
+        return filteredFiles;
     }
 
     private void getBatteryHealthAndCapacity() {
@@ -279,27 +315,42 @@ public class DroidEC extends AnAction {
             return null;
         }
 
-        if (!virtualFile.getName().endsWith(".java")) {
-            System.out.println("[GreenMeter -> actionPerformed -> convertVirtualFileToPsiClass$ Fatal error: VirtualFile is not Java file type");
-            return null;
-        }
+        //We considered only java and kotlin files, so we do not need this
+//        if (!virtualFile.getName().endsWith(".java")) {
+//            System.out.println("[GreenMeter -> actionPerformed -> convertVirtualFileToPsiClass$ Fatal error: VirtualFile is not Java file type");
+//            return null;
+//        }
 
         PsiManager psiManager = PsiManager.getInstance(project);
         PsiFile psiFile = psiManager.findFile(virtualFile);
 
-        if(psiFile == null || !(psiFile instanceof PsiJavaFile)) {
+        if(psiFile == null) {
             System.out.println("[GreenMeter -> actionPerformed -> convertVirtualFileToPsiClass$ Fatal error: The psiFile related to virtualFile could not be found.");
             return null;
         }
 
-        PsiJavaFile psiJavaFile = (PsiJavaFile) psiFile;
-        PsiClass[] classes = psiJavaFile.getClasses();
-        if (classes.length == 0) {
+        PsiClass[] classes;
+        if (psiFile instanceof PsiJavaFile) {
+            PsiJavaFile psiJavaFile = (PsiJavaFile) psiFile;
+            classes = psiJavaFile.getClasses();
+            if (classes.length == 0) {
+                System.out.println("[GreenMeter -> actionPerformed -> convertVirtualFileToPsiClass $ Fatal error: There is no class associated to the input virtual file.");
+                return null;
+            }
+            return classes;
+        } else if (psiFile instanceof KtFile) {
+            KtFile psiKtFile = (KtFile) psiFile;
+            classes = psiKtFile.getClasses();
+            if (classes.length == 0) {
+                System.out.println("[GreenMeter -> actionPerformed -> convertVirtualFileToPsiClass $ Fatal error: There is no class associated to the input virtual file.");
+                return null;
+            }
+            return classes;
+        }else {
             System.out.println("[GreenMeter -> actionPerformed -> convertVirtualFileToPsiClass $ Fatal error: There is no class associated to the input virtual file.");
+            System.out.println("[GreenMeter -> actionPerformed -> convertVirtualFileToPsiClass $ Fatal error: The file is neither Java nor Kotlin.");
             return null;
         }
-
-        return classes;
     }
 
 
