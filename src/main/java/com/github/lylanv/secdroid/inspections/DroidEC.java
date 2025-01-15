@@ -1,5 +1,6 @@
 package com.github.lylanv.secdroid.inspections;
 
+import com.android.tools.r8.L;
 import com.github.lylanv.secdroid.toolWindows.LogcatAnalyzerToolWindowFactory;
 import com.github.lylanv.secdroid.utils.ThreeStringKey;
 import com.github.lylanv.secdroid.utils.TwoStringKey;
@@ -25,10 +26,13 @@ import com.intellij.psi.search.FileTypeIndex;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.PsiTreeUtil;
 import org.jetbrains.kotlin.psi.*;
+import org.jetbrains.uast.kotlin.KotlinUBlockExpression;
 
 import java.util.*;
 
 public class DroidEC extends AnAction {
+    private final String LANGUAGE_JAVA = "java";
+    private final String LANGUAGE_KOTLIN = "kotlin";
     Project project; //Holds the project
     public static String projectName;
     PsiParserFacade parserFacade; //Holds the PsiParserFacade
@@ -59,9 +63,6 @@ public class DroidEC extends AnAction {
     public void actionPerformed(@NotNull AnActionEvent event) {
 
         System.out.println("[GreenMeter -> actionPerformed$ SECDroid button is clicked");
-
-
-        //fillRedAPICallsSet();
 
         //Gets the project
         project = event.getData(PlatformDataKeys.PROJECT);
@@ -170,6 +171,8 @@ public class DroidEC extends AnAction {
         * Since FileTypeIndex.NAME is deprecated, it is replaced by following line of code.
         * */
         //containingFiles = FileTypeIndex.getFiles(JavaFileType.INSTANCE, GlobalSearchScope.projectScope(project));
+
+        //Gets all the Java and Kotlin files in the project /src/main folder in the form of virtual file
         containingFiles = getAllJavaAndKotlinFiles(project);
 
         if (containingFiles.toArray().length == 0) {
@@ -180,42 +183,65 @@ public class DroidEC extends AnAction {
         //Gets the classes in each file in the project
         for (VirtualFile virtualFile : containingFiles) {
             /*
-             * By this "if", we exclude all java files that are not in the main folder of the project such as test files
+             * By this "if", we exclude all java and kotlin files that are not in the main folder of the project such as test files
              * to be more precise androidTest and test
              * Filters the Java files in the project to access the Java files with actual source code of the application
              * */
             if (virtualFile.getUrl().contains("/src/main")){
-                psiClasses = convertVirtualFileToPsiClass(project,virtualFile);
-                if (psiClasses == null || psiClasses.length == 0) {
-                    System.out.println("[GreenMeter -> actionPerformed$ Could not retrieve the classes in the file " + virtualFile.getName().trim());
-                }else {
-                    //retrieveClasses(psiClasses); //Calls methods that annotate methods - WORKING
-                    //Determines if there is any missing import
-                    //Be careful, we need to first call the checkImports function then the addLogImportStatement function
-                    importLogStatementAvailable = importChecker.checkImports(virtualFile,psiManager);
+                PsiManager psiManager = PsiManager.getInstance(project);
+                PsiFile psiFile = psiManager.findFile(virtualFile);
 
-                    //@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ Lyla : STOP @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+                if (psiFile instanceof PsiJavaFile) {
+                    psiClasses = convertVirtualFileToPsiClass(project,virtualFile);
+                    if (psiClasses == null || psiClasses.length == 0) {
+                        System.out.println("[GreenMeter -> actionPerformed$ Could not retrieve the classes in the file " + virtualFile.getName().trim());
+                    }else {
+                        //retrieveClasses(psiClasses); //Calls methods that annotate methods - WORKING
+                        //Determines if there is any missing import
+                        //Be careful, we need to first call the checkImports function then the addLogImportStatement function
+                        importLogStatementAvailable = importChecker.checkImports(psiFile,LANGUAGE_JAVA);
 
+                        //To detect methods in the code we first need to extract class in the source code
+                        logMethodsStart(psiClasses, virtualFile);
 
-                    //To detect methods in the code we first need to extract class in the source code
-                    logMethodsStart(psiClasses);
+                        analyzeAndroidAPIs(virtualFile);
 
-
-                    analyzeAndroidAPIs(virtualFile);
-
-                    /*
-                    * IMPORTANT NOTE: Missing imports should be added after log statements; otherwise, we will get error that we try to change the un-commited document
-                    * Add the import log statement if it is not exist
-                    * */
-                    if (!importLogStatementAvailable) {
-                        importChecker.addLogImportStatement(virtualFile);
+                        /*
+                         * IMPORTANT NOTE: Missing imports should be added after log statements; otherwise, we will get error that we try to change the un-commited document
+                         * Add the import log statement if it is not exist
+                         * */
+                        if (!importLogStatementAvailable) {
+                            importChecker.addLogImportStatement(psiFile,LANGUAGE_JAVA);
+                        }
                     }
+                }else if (psiFile instanceof KtFile) {
 
+                    List<KtClass> ktClasses = convertVirtualFileToKotlinClass(project,virtualFile);
+
+                    if (ktClasses == null || ktClasses.size() == 0) {
+                        System.out.println("[GreenMeter -> actionPerformed$ Could not retrieve the classes in the Kotlin file " + virtualFile.getName().trim());
+                    }else {
+                        importLogStatementAvailable = importChecker.checkImports(psiFile,LANGUAGE_KOTLIN);
+
+                        //To detect methods in the code we first need to extract class in the source code
+                        logFunctionsStart(ktClasses, virtualFile);
+
+                        analyzeAndroidAPIsInKotlinFiles(virtualFile);
+
+                        /*
+                         * IMPORTANT NOTE: Missing imports should be added after log statements; otherwise, we will get error that we try to change the un-commited document
+                         * Add the import log statement if it is not exist
+                         * */
+                        if (!importLogStatementAvailable) {
+                            importChecker.addLogImportStatement(psiFile,LANGUAGE_KOTLIN);
+                        }
+                    }
+                } else {
+                    System.out.println("[GreenMeter -> actionPerformed$ Fatal Error: unknown file type: " + virtualFile.getName().trim());
                 }
             }
         }
     }
-
 
 
     private Collection<VirtualFile> getAllJavaAndKotlinFiles(Project project) {
@@ -242,6 +268,7 @@ public class DroidEC extends AnAction {
         return filteredFiles;
     }
 
+    // UI - Getting Input
     private void getBatteryHealthAndCapacity() {
         BatteryHealthAndCapacityDialog dialog = new BatteryHealthAndCapacityDialog();
         if (dialog.showAndGet()) { // showAndGet() returns true if OK is clicked
@@ -276,7 +303,7 @@ public class DroidEC extends AnAction {
             }
         }
     }
-
+    // UI - Getting Input
     private boolean isValidDouble(String value){
         if (value == null || value.length() == 0) {
             return false;
@@ -289,7 +316,7 @@ public class DroidEC extends AnAction {
             return false;
         }
     }
-
+    // UI - Getting Input
     private void showPowerXmlFileChooser() {
         // Create a FileChooserDescriptor to specify what kind of files to allow
         FileChooserDescriptor fileChooserDescriptor = new FileChooserDescriptor(true, false, false, false, false, false);
@@ -308,7 +335,7 @@ public class DroidEC extends AnAction {
     }
 
 
-    // This method converts VirtualFiles to psiClass
+    // This method converts VirtualFiles to psiClass (Java classes)
     private static PsiClass[] convertVirtualFileToPsiClass(Project project, VirtualFile virtualFile) {
         if (virtualFile == null) {
             System.out.println("[GreenMeter -> actionPerformed -> convertVirtualFileToPsiClass$ Fatal error: VirtualFile is null");
@@ -338,14 +365,15 @@ public class DroidEC extends AnAction {
                 return null;
             }
             return classes;
-        } else if (psiFile instanceof KtFile) {
-            KtFile psiKtFile = (KtFile) psiFile;
-            classes = psiKtFile.getClasses();
-            if (classes.length == 0) {
-                System.out.println("[GreenMeter -> actionPerformed -> convertVirtualFileToPsiClass $ Fatal error: There is no class associated to the input virtual file.");
-                return null;
-            }
-            return classes;
+//        }
+//        else if (psiFile instanceof KtFile) {
+//            KtFile psiKtFile = (KtFile) psiFile;
+//            classes = psiKtFile.getClasses();
+//            if (classes.length == 0) {
+//                System.out.println("[GreenMeter -> actionPerformed -> convertVirtualFileToPsiClass $ Fatal error: There is no class associated to the input virtual file.");
+//                return null;
+//            }
+//            return classes;
         }else {
             System.out.println("[GreenMeter -> actionPerformed -> convertVirtualFileToPsiClass $ Fatal error: There is no class associated to the input virtual file.");
             System.out.println("[GreenMeter -> actionPerformed -> convertVirtualFileToPsiClass $ Fatal error: The file is neither Java nor Kotlin.");
@@ -353,8 +381,44 @@ public class DroidEC extends AnAction {
         }
     }
 
+    // This method converts VirtualFiles to psiClass (Kotlin classes)
+    private static List<KtClass> convertVirtualFileToKotlinClass(Project project, VirtualFile virtualFile) {
+        if (virtualFile == null) {
+            System.out.println("[GreenMeter -> actionPerformed -> convertVirtualFileToKotlinClass$ Fatal error: VirtualFile is null");
+            return null;
+        }
 
-    private void logMethodsStart(PsiClass[] psiClasses) {
+        PsiManager psiManager = PsiManager.getInstance(project);
+        PsiFile psiFile = psiManager.findFile(virtualFile);
+        if(psiFile == null) {
+            System.out.println("[GreenMeter -> actionPerformed -> convertVirtualFileToKotlinClass$ Fatal error: The psiFile related to virtualFile could not be found.");
+            return null;
+        }
+
+        KtFile psiKtFile = (KtFile) psiFile;
+        if (psiKtFile == null) {
+            System.out.println("[GreenMeter -> actionPerformed -> convertVirtualFileToKotlinClass$ Fatal error: The psiKtFile related to virtualFile could not be found.");
+            return null;
+        }
+
+        List<KtClass> kotlinClasses = new ArrayList<>();
+        // Iterate over all top-level elements in the Kotlin file
+        for (KtDeclaration classOrObject : psiKtFile.getDeclarations()) {
+            if (classOrObject instanceof KtClass) {
+                kotlinClasses.add((KtClass) classOrObject);
+            }
+        }
+
+//        classes = (KtClass[]) psiKtFile.getClasses();
+        if (kotlinClasses.size() == 0 || kotlinClasses == null) {
+            System.out.println("[GreenMeter -> actionPerformed -> convertVirtualFileToKotlinClass$ Fatal error: There is no class associated to the input virtual file.");
+            return null;
+        }
+        return kotlinClasses;
+    }
+
+    private void logMethodsStart(PsiClass[] psiClasses, VirtualFile virtualFile) {
+
         //Extracts the class from the classes array
         for (PsiClass psiClass : psiClasses) {
             String className = psiClass.getName();
@@ -363,75 +427,202 @@ public class DroidEC extends AnAction {
             //Get all the methods in the class
             psiMethods = psiClass.getMethods();
 
-            for (PsiMethod psiMethod : psiMethods) {
-                String methodName = psiMethod.getName();
-                System.out.println("[GreenMeter -> actionPerformed -> logMethodsStart$ The method name is " + methodName);
+            if (psiMethods != null) {
+                for (PsiMethod psiMethod : psiMethods) {
+                    String methodName = psiMethod.getName();
+                    System.out.println("[GreenMeter -> actionPerformed -> logMethodsStart$ The method name is " + methodName);
 
-                //Get method body
-                PsiCodeBlock methodBody = psiMethod.getBody();
+                    //Get method body
+                    PsiCodeBlock methodBody = psiMethod.getBody();
 
-                if (methodBody == null) {
-                    System.out.println("[GreenMeter -> actionPerformed -> logMethodsStart$ The " + methodName + " method is empty so it will not consume energy!");
-                }else {
+                    if (methodBody == null) {
+                        System.out.println("[GreenMeter -> actionPerformed -> logMethodsStart$ The " + methodName + " method is empty so it will not consume energy!");
+                    }else {
 
-                    //Extract Android API calls from the method body
-                    retrieveAPICallsInMethod(className, methodName, methodBody);
+                        //Extract Android API calls from the method body
+                        retrieveAPICallsInMethod(className, methodName, methodBody);
 
-                    //Generate the method start log statement
-                    String startLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodName + "," + className + "," + MethodStart_TAG + ")\");";
-                    PsiStatement startLogStatementElement = factory.createStatementFromText(startLogStatement,psiMethod);
+                        //Generate the method start log statement
+                        String startLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodName + "," + className + "," + MethodStart_TAG + ")\");";
+                        PsiStatement startLogStatementElement = factory.createStatementFromText(startLogStatement,psiMethod);
 
-                    //Add the method start log statement
-                    WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {methodBody.addBefore(startLogStatementElement, methodBody.getFirstBodyElement());});
+                        //Add the method start log statement
+                        WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {methodBody.addBefore(startLogStatementElement, methodBody.getFirstBodyElement());});
 
-                    PsiStatement[] statements = methodBody.getStatements();
-                    // Check if the code block has at least one statement
-                    if(statements.length > 0) {
-                        PsiStatement lastStatement = statements[statements.length - 1]; // Get the last statement
+                        PsiStatement[] statements = methodBody.getStatements();
+                        // Check if the code block has at least one statement
+                        if(statements.length > 0) {
+                            PsiStatement lastStatement = statements[statements.length - 1]; // Get the last statement
 
-                        // Check if the last statement is a method call to finish()
-                        if (lastStatement instanceof PsiExpressionStatement) {
-                            PsiExpression expression = ((PsiExpressionStatement) lastStatement).getExpression();
-                            if (expression instanceof PsiMethodCallExpression) {
-                                PsiMethodCallExpression methodCall = (PsiMethodCallExpression) expression;
-                                PsiReferenceExpression methodExpression = methodCall.getMethodExpression();
-                                String lastMethodName = methodExpression.getReferenceName();
+                            // Check if the last statement is a method call to finish()
+                            if (lastStatement instanceof PsiExpressionStatement) {
+                                PsiExpression expression = ((PsiExpressionStatement) lastStatement).getExpression();
+                                if (expression instanceof PsiMethodCallExpression) {
+                                    PsiMethodCallExpression methodCall = (PsiMethodCallExpression) expression;
+                                    PsiReferenceExpression methodExpression = methodCall.getMethodExpression();
+                                    String lastMethodName = methodExpression.getReferenceName();
 
-                                //if (!"finish".equals(lastMethodName) && !"startActivityForResult".equals(lastMethodName)) {
-                                if (!"finish".equals(lastMethodName)) {
+                                    //if (!"finish".equals(lastMethodName) && !"startActivityForResult".equals(lastMethodName)) {
+                                    if (!"finish".equals(lastMethodName)) {
 
-                                    generateMethodEndLogAndAdd(methodName, className, psiMethod, methodBody);
+                                        generateMethodEndLogAndAdd(methodName, className, psiMethod, methodBody);
 
-                                } else {
+                                    } else {
+
+                                        //Generate the method end log statement
+                                        String endLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodName + "," + className + "," + MethodEnd_TAG + ")\");";
+                                        PsiStatement endLogStatementElement = factory.createStatementFromText(endLogStatement, psiMethod);
+
+                                        // Insert the log statement before the finish() call
+                                        WriteCommandAction.runWriteCommandAction(project, () -> {
+                                            methodBody.addBefore(endLogStatementElement, lastStatement);
+                                        });
+                                    }
+                                }
+                            }else if (lastStatement instanceof PsiReturnStatement){
+                                //Generate the method end log statement
+                                String endLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodName + "," + className + "," + MethodEnd_TAG + ")\");";
+                                PsiStatement endLogStatementElement = factory.createStatementFromText(endLogStatement, psiMethod);
+
+                                // Insert the log statement before the finish() call
+                                WriteCommandAction.runWriteCommandAction(project, () -> {
+                                    methodBody.addBefore(endLogStatementElement, lastStatement);
+                                });
+                            }else {
+                                generateMethodEndLogAndAdd(methodName, className, psiMethod, methodBody);
+                            }
+                        }else {
+                            generateMethodEndLogAndAdd(methodName, className, psiMethod, methodBody);
+
+                        }
+
+                    }
+                }
+            }else {
+                System.out.println("[GreenMeter -> actionPerformed -> logMethodsStart$ The class named " + className + " is empty and does not have any methods!");
+            }
+        }
+    }
+
+
+    private void logFunctionsStart(List<KtClass> kotlinClasses, VirtualFile virtualFile) {
+
+        //Extracts the class from the classes list
+        for (KtClass kotlinClass : kotlinClasses) {
+            String className = kotlinClass.getName();
+            System.out.println("[GreenMeter -> actionPerformed -> logFunctionsStart$ The class name is " + className);
+
+            // functions: Holds all the functions inside the input kotlin file and a specific class in that
+            List<KtNamedFunction> functions = new ArrayList<>();
+            // Get all declarations in the class
+            for (KtDeclaration declaration : kotlinClass.getDeclarations()) {
+                // Filter for functions
+                if (declaration instanceof KtNamedFunction) {
+                    functions.add((KtNamedFunction) declaration);
+                }
+            }
+
+            if (functions.size() > 0) {
+                for (KtNamedFunction function : functions) {
+                    String functionName = function.getName();
+                    System.out.println("[GreenMeter -> actionPerformed -> logFunctionsStart$ The function name is " + functionName);
+
+                    KtExpression functionBody = function.getBodyExpression();
+                    //KtBlockExpression functionBody = function.getBodyBlockExpression();
+
+                    if (functionBody == null) {
+                        System.out.println("[GreenMeter -> actionPerformed -> logFunctionsStart$ The class named " + className + " is empty and does not have any methods!");
+                    }else {
+                        //Extract Android API calls from the method body
+                        retrieveAPICallsInKotlinFunction(className, functionName, functionBody);
+
+                        //Generate the method start log statement
+                        String startLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + functionName + "," + className + "," + MethodStart_TAG + ")\")";
+                        KtExpression expression = factoryKotlin.createExpression(startLogStatement);
+                        //KtStatementExpression expression = (KtStatementExpression) factoryKotlin.createExpression(startLogStatement);
+
+                        //Add the method start log statement
+                        WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {
+                            PsiElement firstContent = functionBody.getFirstChild();
+
+                            if (firstContent != null) {
+                                functionBody.addAfter(expression,functionBody.getFirstChild());
+                            }else {
+                                functionBody.add(expression);
+                            }
+                        });
+
+                        KtBlockExpression functionBodyBlock = function.getBodyBlockExpression();
+                        List<KtExpression> ktExpressions = functionBodyBlock.getStatements();
+
+                        // Check if the code block has at least one statement
+                        if(ktExpressions.size() > 0) {
+                            KtExpression lastStatement = ktExpressions.getLast(); // Get the last statement
+
+                            // Check if the last statement is a function call to finish()
+                            if (lastStatement instanceof KtCallExpression) {
+
+                                KtCallExpression lastFunctionCall = (KtCallExpression) lastStatement;
+
+                                // Get the method name
+                                KtExpression calleeExpression = lastFunctionCall.getCalleeExpression();
+                                String lastFunctionCallName = (calleeExpression != null) ? calleeExpression.getText() : null;
+
+                                if (!"finish".equals(lastFunctionCallName)) { // if the last statement is a function call but not a finish()
+
+                                    generateFunctionEndLogAndAdd(functionName, className, function);
+
+                                } else { // if the last statement is finish()
 
                                     //Generate the method end log statement
-                                    String endLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodName + "," + className + "," + MethodEnd_TAG + ")\");";
-                                    PsiStatement endLogStatementElement = factory.createStatementFromText(endLogStatement, psiMethod);
+                                    String endLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + functionName + "," + className + "," + MethodEnd_TAG + ")\")";
+                                    KtExpression endLogStatementElement = factoryKotlin.createExpression(endLogStatement);
 
                                     // Insert the log statement before the finish() call
                                     WriteCommandAction.runWriteCommandAction(project, () -> {
-                                        methodBody.addBefore(endLogStatementElement, lastStatement);
+
+                                        // Insert the end log statement after the newline
+                                        functionBody.addBefore(endLogStatementElement, lastStatement);
+
+                                        // Create a newline (white space) element
+                                        PsiElement newLine = factoryKotlin.createNewLine();
+
+                                        // Insert the newline before the last statement
+                                        functionBody.addBefore(newLine, lastStatement);
+
                                     });
                                 }
+
+                            }else if (lastStatement instanceof KtReturnExpression){ // if the last statement is return
+                                //Generate the method end log statement
+                                String endLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + functionName + "," + className + "," + MethodEnd_TAG + ")\")";
+                                KtExpression endLogStatementElement = factoryKotlin.createExpression(endLogStatement);
+
+                                // Insert the log statement before the finish() call
+                                WriteCommandAction.runWriteCommandAction(project, () -> {
+
+                                    // Insert the end log statement after the newline
+                                    functionBody.addBefore(endLogStatementElement, lastStatement);
+
+                                    // Create a newline (white space) element
+                                    PsiElement newLine = factoryKotlin.createNewLine();
+
+                                    // Insert the newline before the last statement
+                                    functionBody.addBefore(newLine, lastStatement);
+
+                                });
+                            }else { // all other type of expressions -> add the statement
+                                generateFunctionEndLogAndAdd(functionName, className, function);
                             }
-                        }else if (lastStatement instanceof PsiReturnStatement){
-                            //Generate the method end log statement
-                            String endLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodName + "," + className + "," + MethodEnd_TAG + ")\");";
-                            PsiStatement endLogStatementElement = factory.createStatementFromText(endLogStatement, psiMethod);
 
-                            // Insert the log statement before the finish() call
-                            WriteCommandAction.runWriteCommandAction(project, () -> {
-                                methodBody.addBefore(endLogStatementElement, lastStatement);
-                            });
-                        }else {
-                            generateMethodEndLogAndAdd(methodName, className, psiMethod, methodBody);
+                        }else { // function body is empty -> add the statement
+                            generateFunctionEndLogAndAdd(functionName, className, function);
+
                         }
-                    }else {
-                        generateMethodEndLogAndAdd(methodName, className, psiMethod, methodBody);
-
                     }
-
                 }
+            } else {
+                System.out.println("[GreenMeter -> actionPerformed -> logFunctionsStart$ There is not any functions in the class " + className + "!");
             }
         }
     }
@@ -452,6 +643,71 @@ public class DroidEC extends AnAction {
     }
 
 
+    private void generateFunctionEndLogAndAdd(String functionName, String className, KtNamedFunction function) {
+        KtBlockExpression functionBodyBlock = function.getBodyBlockExpression();
+        List<KtExpression> ktExpressions = functionBodyBlock.getStatements();
+
+        KtExpression lastStatement = ktExpressions.getLast();
+
+        //Generate the method end log statement
+        String endLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + functionName + "," + className + "," + MethodEnd_TAG + ")\")";
+        KtExpression endLogStatementElement = factoryKotlin.createExpression(endLogStatement);
+
+        CodeStyleManager codeStyleManager = CodeStyleManager.getInstance(project);
+
+        // Insert the log statement before the finish() call
+        WriteCommandAction.runWriteCommandAction(project, () -> {
+            functionBodyBlock.addBefore(endLogStatementElement, functionBodyBlock.getLastChild());
+        });
+    }
+
+
+    // Extract API calls and count them within the input kotlin function body
+    private void retrieveAPICallsInKotlinFunction(String functionClassName, String inputFunctionName, KtExpression ktExpression) {
+        List<KtCallExpression> functionCalls = new ArrayList<>();
+
+        if (ktExpression != null) {
+            // Traverse the body for function calls
+            PsiTreeUtil.processElements(ktExpression, element -> {
+                if (element instanceof KtCallExpression) {
+                    functionCalls.add((KtCallExpression) element);
+                }
+                return true; // Continue traversal
+            });
+
+
+            for (KtCallExpression callExpression : functionCalls) {
+//                KtCallExpression functionCall = (KtCallExpression) callExpression;
+//                String functionCallName =  ((KtCallExpression) callExpression).getName();
+
+                String functionCallNameWithArguments =  callExpression.getText(); // Get the function call with its all arguments
+                String functionCallName = functionCallNameWithArguments.substring(0, functionCallNameWithArguments.indexOf("(")); // Get the function call name without its arguments
+
+                System.out.println("----------- DroidEC -> Function call found: " + functionCallName);
+
+                if (singleton.redAPICalls.keySet().contains(functionCallName)) {
+                    if (!functionCallName.equals("d")) {
+                        updateMethodsEnergyMaps(functionCallName, functionClassName, inputFunctionName);
+                    } else {
+
+                        if (!functionCallNameWithArguments.contains(Logging_TAG)) {
+                            updateMethodsEnergyMaps(functionCallName, functionClassName, inputFunctionName);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Copy the methodsAPICallsCountLocalMap to a Map in the singleton, so all the classes can access it
+        if (!methodsAPICallsCountLocalMap.isEmpty()) {
+            singleton.fillMethodsAPICallsCountMap(methodsAPICallsCountLocalMap);
+        }
+
+        if (!methodsAPICallsTotalEnergyCostLocalMap.isEmpty()) {
+            singleton.fillMethodsAPICallsEnergyMap(methodsAPICallsTotalEnergyCostLocalMap);
+        }
+    }
+
     // Extract API calls and count them within the input method body
     public void retrieveAPICallsInMethod(String methodClassName, String inputMethodName, PsiCodeBlock methodBody) {
         List<PsiMethodCallExpression> methodCalls = new ArrayList<>();
@@ -463,6 +719,7 @@ public class DroidEC extends AnAction {
             PsiReferenceExpression methodExpression = psiMethodCallExpression.getMethodExpression();
             String methodName = methodExpression.getReferenceName();  // Get the method name
             System.out.println("----------- DroidEC -> Method call found: " + methodName);
+
             if (singleton.redAPICalls.keySet().contains(methodName)){
                 if (!methodName.equals("d")) {
                     updateMethodsEnergyMaps(methodName, methodClassName, inputMethodName);
@@ -520,6 +777,19 @@ public class DroidEC extends AnAction {
             singleton.fillMethodsAPICallsEnergyMap(methodsAPICallsTotalEnergyCostLocalMap);
         }
     }
+
+
+//    public void copyMethodInfo(){
+//        // Copy the methodsAPICallsCountLocalMap to a Map in the singleton, so all the classes can access it
+//        if (!methodsAPICallsCountLocalMap.isEmpty()) {
+//            singleton.fillMethodsAPICallsCountMap(methodsAPICallsCountLocalMap);
+//        }
+//
+//        if (!methodsAPICallsTotalEnergyCostLocalMap.isEmpty()) {
+//            singleton.fillMethodsAPICallsEnergyMap(methodsAPICallsTotalEnergyCostLocalMap);
+//        }
+//    }
+
 
     private void updateMethodsEnergyMaps(String methodName, String methodClassName, String inputMethodName) {
 
@@ -618,7 +888,7 @@ public class DroidEC extends AnAction {
 //
 //    }
 
-    // This method travers the input virtual file and finds method call
+    // This method travers the input Java virtual file and finds method call
     // and filters specific API calls and adds the proper log statements
     private void analyzeAndroidAPIs(VirtualFile inputVirtualFile) {
         PsiFile inputPsiFile = psiManager.findFile(inputVirtualFile);
@@ -797,6 +1067,82 @@ public class DroidEC extends AnAction {
         }
     }
 
+    // This method travers the input Kotlin virtual file and finds method call
+    // and filters specific API calls and adds the proper log statements
+    private void analyzeAndroidAPIsInKotlinFiles(VirtualFile inputVirtualFile) {
+        PsiFile inputPsiFile = psiManager.findFile(inputVirtualFile);
+
+        if (inputPsiFile != null) {
+            System.out.println("[GreenMeter -> analyzeAndroidAPIsInKotlinFiles$ psiFile name is " + inputPsiFile.getName());
+
+            inputPsiFile.accept(new KtTreeVisitorVoid() {
+                @Override
+                public void visitCallExpression(@NotNull KtCallExpression callExpression) {
+                    super.visitCallExpression(callExpression);
+
+                    String fileName = inputPsiFile.getName();
+                    KtExpression calleeExpression = callExpression.getCalleeExpression();
+
+                    // Get the function call name
+                    String functionCallName = (calleeExpression != null) ? calleeExpression.getText() : null;
+                    System.out.println("[GreenMeter -> analyzeAndroidAPIsInKotlinFiles$ methodCallName is " + functionCallName);
+
+                    String fullQualifiedMethodName = null;
+                    if (callExpression != null) {
+                        PsiElement parentExpression = callExpression.getParent();
+                        if (parentExpression instanceof KtDotQualifiedExpression) {
+                            // Cast the parent to KtDotQualifiedExpression
+                            KtDotQualifiedExpression qualifiedExpression = (KtDotQualifiedExpression) parentExpression;
+
+                            // Get the receiver expression (e.g., "Log")
+                            String qualifier = qualifiedExpression.getReceiverExpression().getText();
+
+                            // Combine the receiver expression and function name to form e.g., "Log.d"
+                            fullQualifiedMethodName = qualifier + "." + functionCallName;
+                        } else {
+                            fullQualifiedMethodName = functionCallName;
+                        }
+                    }
+
+                    System.out.println("[GreenMeter -> analyzeAndroidAPIsInKotlinFiles$ methodCallName parent name is " + fullQualifiedMethodName);
+
+                    // Check for unique APIs
+                    if (singleton.redAPICalls.containsKey(functionCallName)) {
+                        if (!"d".equals(functionCallName)) {
+                            addLogStatementToKotlinFile(callExpression, functionCallName, fileName);
+                        } else {
+                            KtValueArgumentList argumentList = callExpression.getValueArgumentList();
+                            if (argumentList != null) {
+                                List<KtValueArgument> arguments = argumentList.getArguments();
+                                if (!arguments.isEmpty()) {
+                                    KtValueArgument firstArgument = arguments.get(0);
+                                    if (!firstArgument.getText().contains(Logging_TAG)) {
+                                        addLogStatementToKotlinFile(callExpression, functionCallName, fileName);
+                                    }
+                                } else {
+                                    addLogStatementToKotlinFile(callExpression, functionCallName, fileName);
+                                }
+                            }
+                        }
+                    } else {
+                        // Extend work for other API call types
+                        if (singleton.hwAPICalls.containsKey(fullQualifiedMethodName)) {
+                            // Case 2: hardware APIs
+                        } else if (singleton.jointRedAPICalls.containsKey(fullQualifiedMethodName)) {
+                            // Case 3: repetitive APIs
+                        } else {
+                            // Case 4: CPU/Memory intensive
+                        }
+                    }
+                }
+            });
+
+
+        }else {
+            System.out.println("[GreenMeter -> analyzeAndroidAPIsInKotlinFiles$ There is not equivalent PSI file for input virtual file.");
+        }
+    }
+
     //This method creates and adds the log statements to the source code of the application
     private void addLogStatement(PsiMethodCallExpression expression, String methodCallName, String javaFile) {
 
@@ -868,8 +1214,97 @@ public class DroidEC extends AnAction {
             System.out.println("[GreenMeter -> logFindViewById$ Fatal error: Method call expression is null: There is not any method call!");
         }
 
+    }
+
+    //This method creates and adds the log statements to the source code of the application
+    private void addLogStatementToKotlinFile(KtCallExpression expression, String functionCallName, String kotlinFile) {
+
+        System.out.println("[GreenMeter -> addLogStatementToKotlinFile$ addLogStatementToKotlinFile method is called");
+
+        /*
+        * Traverse upwards if the parent is a KtDotQualifiedExpression to get the full expression
+        * Check if the call expression is part of a chain
+        * This block code is to get the full expression of the function call
+        * The reason that we used parentLookedUp variable is the requirement of
+        * a new line if the parent traversed more than one time
+        *  */
+        PsiElement parent = expression.getParent();
+
+        int parentLookedUp = 0;
+        PsiElement previousParent = parent;
+        while (!(parent instanceof KtBlockExpression) || parent == null) {
+            parentLookedUp++;
+            previousParent = parent;
+            parent = parent.getParent();
+        }
+        parent = previousParent;
 
 
+        if (parent != null || parent.isValid()) {
+
+            int lineNumber;
+            if (!"finish".equals(functionCallName) && !"startActivityForResult".equals(functionCallName)) {
+                // Line number for log statement
+                if (importLogStatementAvailable) {
+                    lineNumber = getLineNumber(expression) + 1;
+                } else {
+                    lineNumber = getLineNumber(expression) + 3;
+                }
+
+                // Create log statement using KtPsiFactory
+                KtPsiFactory factory = new KtPsiFactory(project);
+                String logStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + functionCallName + "," + kotlinFile + "," + lineNumber + ")\")";
+                KtExpression logStatementElement = factory.createExpression(logStatement);
+
+                PsiElement finalParent = parent;
+                KtCallExpression finalExpression = expression;
+                int finalParentLookedUp = parentLookedUp;
+                WriteCommandAction.runWriteCommandAction(project, () -> {
+
+                    if (finalParentLookedUp > 1){
+                        PsiElement newLine = factoryKotlin.createNewLine();
+                        finalParent.addAfter(newLine, finalExpression);
+                    }
+
+                    PsiElement addedElement = finalParent.addAfter(logStatementElement, finalExpression);
+
+                    // Optional: Add an actual new line for readability
+                    PsiElement newLine = factoryKotlin.createNewLine();
+                    finalParent.addAfter(newLine, finalExpression);
+
+                    // Reformat the added element for proper indentation
+                    CodeStyleManager.getInstance(project).reformat(addedElement);
+                });
+
+
+            } else {
+                // Handle special cases for "finish", "startActivityForResult"
+                if (importLogStatementAvailable) {
+                    lineNumber = getLineNumber(expression) + 2;
+                } else {
+                    lineNumber = getLineNumber(expression) + 4;
+                }
+
+                // Create log statement
+                KtPsiFactory factory = new KtPsiFactory(project);
+                String logStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + functionCallName + "," + kotlinFile + "," + lineNumber + ")\")";
+                KtExpression logStatementElement = factory.createExpression(logStatement);
+
+                // Insert log statement before the target expression
+                PsiElement finalParent1 = parent;
+                KtCallExpression finalExpression1 = expression;
+                WriteCommandAction.runWriteCommandAction(project, () -> {
+                    finalParent1.addBefore(logStatementElement, finalExpression1);
+
+                    // Optional: Add an actual new line for readability
+                    PsiElement newLine = factoryKotlin.createNewLine();
+                    finalParent1.addBefore(newLine, finalExpression1);
+                });
+            }
+
+        }else{
+            System.out.println("[GreenMeter -> addLogStatementToKotlinFile$ Fatal Error: Function call expression is null: There is no function call!");
+        }
 
     }
 
