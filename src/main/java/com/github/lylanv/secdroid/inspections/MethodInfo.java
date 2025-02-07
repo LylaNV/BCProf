@@ -92,6 +92,10 @@ public class MethodInfo {
         return networkPackets_start;
     }
 
+    public void setNetworkPacketsStart(Map<String, Integer[]> networkPacketsStartState) {
+        networkPackets_start.putAll(networkPacketsStartState);
+    }
+
     public double getBatteryCharge() {
         return batteryCharge;
     }

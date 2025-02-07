@@ -8,6 +8,10 @@ import java.util.Map;
 public class AdbUtils {
     private static String adbPath = "/Users/lylan/UiO/android/platform-tools/adb";
 
+    public static long  gpsUsageCount = 0;
+    public static long  gpsUsagePreviousCount = 0;
+    public static Boolean gpsActiveInPreviousSlot = false;
+
     public static boolean isAdbAvailable() {
         try {
             //String[] cmdArrayAdbAvailable = new String[1];
@@ -211,10 +215,47 @@ public class AdbUtils {
      * isNetworkConnectionEstablished, isPackageUsingNetwork
      ****************************************************************** */
 
-    //Returns Number of Received and sent packets over WiFi and Cellular data
-    public static Map<String,Integer[]> numberOfPackets() {
+    public static int getPackagePid(String packageName) {
         try {
-            ProcessBuilder pb = new ProcessBuilder(adbPath, "shell", "cat", "/proc/net/dev");
+            ProcessBuilder pb = new ProcessBuilder(adbPath, "shell", "pidof", packageName);
+            Process pbProcess = pb.start();
+
+            if (pbProcess != null) {
+                BufferedReader reader = new BufferedReader(new InputStreamReader(pbProcess.getInputStream()));
+                String line = reader.readLine();
+
+                if (line == null) {
+                    return -1;
+                }else {
+                    int parsedPid = Integer.parseInt(line);
+                    if (parsedPid > 0) {
+                        return parsedPid;
+                    }else {
+                        return -1;
+                    }
+                }
+
+            }else {
+                System.out.println("[AdbUtils -> getPackagePid$ FATAL ERROR. Failed to get  package pid!");
+                return -1;
+            }
+        } catch (Exception e){
+            e.printStackTrace();
+            System.out.println("[AdbUtils -> getPackagePid$ FATAL ERROR: IO Error. Failed to get package pid!");
+            return -1;
+        }
+    }
+
+    //Returns Number of Received and sent packets over WiFi and Cellular data for the input Pid
+    public static Map<String,Integer[]> numberOfPackagePackets(int packagePid) {
+        try {
+
+            if (packagePid == -1){
+                return null;
+            }
+
+            String subCommand = "/proc/" + packagePid + "/net/dev";
+            ProcessBuilder pb = new ProcessBuilder(adbPath, "shell", "cat", subCommand);
             Process pbProcess = pb.start();
 
             if (pbProcess != null) {
@@ -233,14 +274,14 @@ public class AdbUtils {
                         String[] parts = line.split("\\s+");
 
                         if (parts.length < 17) {
-                            System.out.println("[AdbUtils -> numberOfPackets$ FATAL ERROR. Unknown line format");
+                            System.out.println("[AdbUtils -> numberOfPackagePackets$ FATAL ERROR. Unknown line format");
                             return null;
                         }
 
                         String interfaceName = parts[1].replace(":", "");
                         numberOfPacketsReceived = Integer.valueOf(parts[3]); // 3rd column is received packets
                         numberOfPacketsSent = Integer.valueOf(parts[11]); // 11th column is transmitted packets
-                        System.out.println("[AdbUtils -> numberOfPackets$ Interface: " + interfaceName + ", Number of received packets: " + numberOfPacketsReceived + ", Number of sent packets: " + numberOfPacketsSent);
+                        //System.out.println("[AdbUtils -> numberOfPackagePackets$ Interface: " + interfaceName + ", Number of received packets: " + numberOfPacketsReceived + ", Number of sent packets: " + numberOfPacketsSent);
 
                         map.put(interfaceName, new Integer[]{numberOfPacketsReceived, numberOfPacketsSent});
                     }
@@ -249,159 +290,214 @@ public class AdbUtils {
                 reader.close();
 
                 if (map.isEmpty()){
-                    System.out.println("[AdbUtils -> numberOfPackets$ FATAL ERROR. Info for the connected interface is not available.");
+                    System.out.println("[AdbUtils -> numberOfPackagePackets$ FATAL ERROR. Info for the connected interface for this package is not available.");
                     return null;
                 } else {
                     return map;
                 }
             } else {
-                System.out.println("[AdbUtils -> numberOfPackets$ FATAL ERROR. Failed to get number of packets process.");
+                System.out.println("[AdbUtils -> numberOfPackagePackets$ FATAL ERROR. Failed to get number of packets process.");
                 return null;
             }
-        } catch (Exception e){
+
+        }catch (Exception e){
             e.printStackTrace();
-            System.out.println("[AdbUtils -> numberOfPackets$ FATAL ERROR: IO Error. Failed to get number of packets.");
+            System.out.println("[AdbUtils -> numberOfPackagePackets$ FATAL ERROR: IO Error. Failed to get number of packets.");
             return null;
         }
     }
 
-
-    // returns one of the connected interfaces if network is available, otherwise returns null
-    public static String isNetworkConnected() {
-        try {
-            ProcessBuilder pb = new ProcessBuilder(adbPath, "shell", "dumpsys", "connectivity");
-            Process pbProcess = pb.start();
-
-            if (pbProcess != null) {
-                BufferedReader reader = new BufferedReader(new InputStreamReader(pbProcess.getInputStream()));
-
-                String line;
-                boolean networkFound = false;
-                while ((line = reader.readLine()) != null) {
-                    if(networkFound){
-                        if (line.contains("eth0")) {//Cellular data
-                            //System.out.println("[AdbUtils -> isNetworkAvailable$ eth0");
-                            networkFound = false;
-                            return "eth0";
-                        }else if (line.contains("wlan0")) { //WiFi
-                            //System.out.println("[AdbUtils -> isNetworkAvailable$ wlan0");
-                            networkFound = false;
-                            return "wlan0";
-                        }else{
-                            networkFound = false;
-                            //System.out.println("[AdbUtils -> isNetworkAvailable$ unknown");
-                            return line; //Unknown
-                        }
-                    }
-                    if (line.contains("Idle timers")) {
-                        networkFound = true;
-                    }
-                }
-
-                reader.close();
-                return networkFound ? "idle timers" : null; //if networkFound is true the output will be idle timer, and it means that there is no connectivity, otherwise there is problem and the output will be null
-            } else {
-                System.out.println("[AdbUtils -> isNetworkAvailable$ FATAL ERROR. Failed to get network status");
-                return null;
-            }
-        } catch (Exception e){
-            e.printStackTrace();
-            System.out.println("[AdbUtils -> isNetworkAvailable$ FATAL ERROR: IO Error. Failed to get network status");
-            return null;
-        }
-    }
-
-    // returns true if network is available, otherwise returns false
-    public static boolean isNetworkConnectedShort() {
-        try {
-            ProcessBuilder pb = new ProcessBuilder(adbPath, "shell", "dumpsys", "connectivity", "|", "grep", "\"NetworkAgentInfo\"");
-            Process pbProcess = pb.start();
-
-            if (pbProcess != null) {
-                BufferedReader reader = new BufferedReader(new InputStreamReader(pbProcess.getInputStream()));
-
-                String line;
-                boolean networkFound = false;
-                while ((line = reader.readLine()) != null) {
-                    if (line.contains("eth0") || line.contains("wlan0")) {//Cellular data
-                        return true;
-                    }
-                }
-
-                reader.close();
-                return false;
-            } else {
-                System.out.println("[AdbUtils -> isNetworkConnectedShort$ FATAL ERROR. Failed to get network status process");
-                return false;
-            }
-        } catch (Exception e){
-            e.printStackTrace();
-            System.out.println("[AdbUtils -> isNetworkConnectedShort$ FATAL ERROR: IO Error. Failed to get network status");
-            return false;
-        }
-    }
-
-    // returns true if there is at least one established network connection, otherwise it returns false
-    // established means there is an active network connection
-    public static boolean isNetworkConnectionEstablished() {
-        try {
-            ProcessBuilder pb = new ProcessBuilder(adbPath, "shell", "netstat");
-            Process pbProcess = pb.start();
-
-            if (pbProcess != null) {
-                BufferedReader reader = new BufferedReader(new InputStreamReader(pbProcess.getInputStream()));
-
-                String line;
-                boolean networkFound = false;
-                while ((line = reader.readLine()) != null) {
-                    if (line.contains("ESTABLISHED")) {
-                        return true;
-                    }
-                }
-
-                reader.close();
-                return false;
-            } else {
-                System.out.println("[AdbUtils -> isNetworkConnectionEstablished$ FATAL ERROR. Failed to get network connections status process.");
-                return false;
-            }
-        } catch (Exception e){
-            e.printStackTrace();
-            System.out.println("[AdbUtils -> isNetworkConnectionEstablished$ FATAL ERROR: IO Error. Failed to get network status");
-            return false;
-        }
-    }
-
-    // returns true if package name is in the output of the command
-    // We cannot conclude that for sure that package is using the internet
-    // but we did here. Consider to find better/ more exact solution.
-    //TODO: find more exact solution
-    public static boolean isPackageUsingNetwork(String appPackageName) {
-        try {
-            ProcessBuilder pb = new ProcessBuilder(adbPath, "shell", "dumpsys", "connectivity");
-            Process pbProcess = pb.start();
-
-            if (pbProcess != null) {
-                BufferedReader reader = new BufferedReader(new InputStreamReader(pbProcess.getInputStream()));
-
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (line.contains(appPackageName)) {
-                        return true;
-                    }
-                }
-
-            }else {
-                System.out.println("[AdbUtils -> isPackageUsingNetwork$ FATAL ERROR: Cannot read the output steam of the command!");
-            }
-
-            return false;
-        } catch (Exception e){
-            e.printStackTrace();
-            System.out.println("[AdbUtils -> isPackageUsingNetwork$ FATAL ERROR: IO Error. Failed to get network status");
-            return false;
-        }
-    }
+//    //Returns Number of Received and sent packets over WiFi and Cellular data
+//    public static Map<String,Integer[]> numberOfPackets() {
+//        try {
+//            ProcessBuilder pb = new ProcessBuilder(adbPath, "shell", "cat", "/proc/net/dev");
+//            Process pbProcess = pb.start();
+//
+//            if (pbProcess != null) {
+//                Integer numberOfPacketsReceived = 0;
+//                Integer numberOfPacketsSent = 0;
+//
+//                BufferedReader reader = new BufferedReader(new InputStreamReader(pbProcess.getInputStream()));
+//
+//                Map<String, Integer[]> map = new HashMap<String, Integer[]>();
+//
+//                String line;
+//                while ((line = reader.readLine()) != null) {
+//                    if (line.contains("wlan0:") || line.contains("eth0:")) {
+//                        //wlan0 -> WiFi
+//                        //eth0 -> cellular data
+//                        String[] parts = line.split("\\s+");
+//
+//                        if (parts.length < 17) {
+//                            System.out.println("[AdbUtils -> numberOfPackets$ FATAL ERROR. Unknown line format");
+//                            return null;
+//                        }
+//
+//                        String interfaceName = parts[1].replace(":", "");
+//                        numberOfPacketsReceived = Integer.valueOf(parts[3]); // 3rd column is received packets
+//                        numberOfPacketsSent = Integer.valueOf(parts[11]); // 11th column is transmitted packets
+//                        System.out.println("[AdbUtils -> numberOfPackets$ Interface: " + interfaceName + ", Number of received packets: " + numberOfPacketsReceived + ", Number of sent packets: " + numberOfPacketsSent);
+//
+//                        map.put(interfaceName, new Integer[]{numberOfPacketsReceived, numberOfPacketsSent});
+//                    }
+//                }
+//
+//                reader.close();
+//
+//                if (map.isEmpty()){
+//                    System.out.println("[AdbUtils -> numberOfPackets$ FATAL ERROR. Info for the connected interface is not available.");
+//                    return null;
+//                } else {
+//                    return map;
+//                }
+//            } else {
+//                System.out.println("[AdbUtils -> numberOfPackets$ FATAL ERROR. Failed to get number of packets process.");
+//                return null;
+//            }
+//        } catch (Exception e){
+//            e.printStackTrace();
+//            System.out.println("[AdbUtils -> numberOfPackets$ FATAL ERROR: IO Error. Failed to get number of packets.");
+//            return null;
+//        }
+//    }
+//
+//
+//    // returns one of the connected interfaces if network is available, otherwise returns null
+//    public static String isNetworkConnected() {
+//        try {
+//            ProcessBuilder pb = new ProcessBuilder(adbPath, "shell", "dumpsys", "connectivity");
+//            Process pbProcess = pb.start();
+//
+//            if (pbProcess != null) {
+//                BufferedReader reader = new BufferedReader(new InputStreamReader(pbProcess.getInputStream()));
+//
+//                String line;
+//                boolean networkFound = false;
+//                while ((line = reader.readLine()) != null) {
+//                    if(networkFound){
+//                        if (line.contains("eth0")) {//Cellular data
+//                            //System.out.println("[AdbUtils -> isNetworkAvailable$ eth0");
+//                            networkFound = false;
+//                            return "eth0";
+//                        }else if (line.contains("wlan0")) { //WiFi
+//                            //System.out.println("[AdbUtils -> isNetworkAvailable$ wlan0");
+//                            networkFound = false;
+//                            return "wlan0";
+//                        }else{
+//                            networkFound = false;
+//                            //System.out.println("[AdbUtils -> isNetworkAvailable$ unknown");
+//                            return line; //Unknown
+//                        }
+//                    }
+//                    if (line.contains("Idle timers")) {
+//                        networkFound = true;
+//                    }
+//                }
+//
+//                reader.close();
+//                return networkFound ? "idle timers" : null; //if networkFound is true the output will be idle timer, and it means that there is no connectivity, otherwise there is problem and the output will be null
+//            } else {
+//                System.out.println("[AdbUtils -> isNetworkAvailable$ FATAL ERROR. Failed to get network status");
+//                return null;
+//            }
+//        } catch (Exception e){
+//            e.printStackTrace();
+//            System.out.println("[AdbUtils -> isNetworkAvailable$ FATAL ERROR: IO Error. Failed to get network status");
+//            return null;
+//        }
+//    }
+//
+//    // returns true if network is available, otherwise returns false
+//    public static boolean isNetworkConnectedShort() {
+//        try {
+//            ProcessBuilder pb = new ProcessBuilder(adbPath, "shell", "dumpsys", "connectivity", "|", "grep", "\"NetworkAgentInfo\"");
+//            Process pbProcess = pb.start();
+//
+//            if (pbProcess != null) {
+//                BufferedReader reader = new BufferedReader(new InputStreamReader(pbProcess.getInputStream()));
+//
+//                String line;
+//                boolean networkFound = false;
+//                while ((line = reader.readLine()) != null) {
+//                    if (line.contains("eth0") || line.contains("wlan0")) {//Cellular data
+//                        return true;
+//                    }
+//                }
+//
+//                reader.close();
+//                return false;
+//            } else {
+//                System.out.println("[AdbUtils -> isNetworkConnectedShort$ FATAL ERROR. Failed to get network status process");
+//                return false;
+//            }
+//        } catch (Exception e){
+//            e.printStackTrace();
+//            System.out.println("[AdbUtils -> isNetworkConnectedShort$ FATAL ERROR: IO Error. Failed to get network status");
+//            return false;
+//        }
+//    }
+//
+//    // returns true if there is at least one established network connection, otherwise it returns false
+//    // established means there is an active network connection
+//    public static boolean isNetworkConnectionEstablished() {
+//        try {
+//            ProcessBuilder pb = new ProcessBuilder(adbPath, "shell", "netstat");
+//            Process pbProcess = pb.start();
+//
+//            if (pbProcess != null) {
+//                BufferedReader reader = new BufferedReader(new InputStreamReader(pbProcess.getInputStream()));
+//
+//                String line;
+//                boolean networkFound = false;
+//                while ((line = reader.readLine()) != null) {
+//                    if (line.contains("ESTABLISHED")) {
+//                        return true;
+//                    }
+//                }
+//
+//                reader.close();
+//                return false;
+//            } else {
+//                System.out.println("[AdbUtils -> isNetworkConnectionEstablished$ FATAL ERROR. Failed to get network connections status process.");
+//                return false;
+//            }
+//        } catch (Exception e){
+//            e.printStackTrace();
+//            System.out.println("[AdbUtils -> isNetworkConnectionEstablished$ FATAL ERROR: IO Error. Failed to get network status");
+//            return false;
+//        }
+//    }
+//
+//    // returns true if package name is in the output of the command
+//    // We cannot conclude that for sure that package is using the internet
+//    // but we did here. Consider to find better/ more exact solution.
+//    //TODO: find more exact solution
+//    public static boolean isPackageUsingNetwork(String appPackageName) {
+//        try {
+//            ProcessBuilder pb = new ProcessBuilder(adbPath, "shell", "dumpsys", "connectivity");
+//            Process pbProcess = pb.start();
+//
+//            if (pbProcess != null) {
+//                BufferedReader reader = new BufferedReader(new InputStreamReader(pbProcess.getInputStream()));
+//
+//                String line;
+//                while ((line = reader.readLine()) != null) {
+//                    if (line.contains(appPackageName)) {
+//                        return true;
+//                    }
+//                }
+//
+//            }else {
+//                System.out.println("[AdbUtils -> isPackageUsingNetwork$ FATAL ERROR: Cannot read the output steam of the command!");
+//            }
+//
+//            return false;
+//        } catch (Exception e){
+//            e.printStackTrace();
+//            System.out.println("[AdbUtils -> isPackageUsingNetwork$ FATAL ERROR: IO Error. Failed to get network status");
+//            return false;
+//        }
+//    }
 
     /* *****************************************************************
      * For checking GPS component
@@ -437,10 +533,84 @@ public class AdbUtils {
 //                }
 
 
+//                // PREVIOUS VERSION
+//                String line;
+//                int counterAPK = 0;
+//                int counterGPS = 0;
+//                while ((line = reader.readLine()) != null) {
+//                    if (line.contains(appPackageName)) {
+//                        packageVisited = true;
+//                        counterAPK++;
+//                    }
+//
+//                    if (line.contains("OFF")) {
+//                        gpsOffVisited = true;
+//                        counterGPS++;
+//                    }
+//
+//                    //If both are visited we can stop the loop because the result is achieved and false should be returned
+//                    if (counterGPS >= 1 && counterAPK >= 1) {
+//                        break;
+//                    }
+//                }
+//
+//                reader.close();
+//                /*The expression evaluates to true only if:
+//                packageVisited is true, and
+//                gpsOffVisited is false.*/
+//                return packageVisited && !gpsOffVisited;
+
+//                String line;
+//                int counterAPK = 0;
+//                int counterOFF = 0;
+//                while ((line = reader.readLine()) != null) {
+//                    if (line.contains(appPackageName)) {
+//                        packageVisited = true;
+//                        counterAPK++;
+//                    }
+//
+//                    if (line.contains("OFF")) {
+//                        gpsOffVisited = true;
+//                        counterOFF++;
+//                    }
+//
+////                    //If both are visited we can stop the loop because the result is achieved and false should be returned
+////                    if (counterGPS >= 1 && counterAPK >= 1) {
+////                        break;
+////                    }
+//                }
+//
+//                reader.close();
+//
+//                if (counterOFF == counterAPK) {
+//                    gpsUsageCount = counterOFF;
+//                    if(gpsActiveInPreviousSlot) {
+//                        gpsUsagePreviousCount = gpsUsageCount;
+//                        gpsActiveInPreviousSlot = false;
+//                        return false;
+//                    }else {
+//                        if (gpsUsageCount == gpsUsagePreviousCount) {
+//                            return false;
+//                        }else if (gpsUsageCount > gpsUsagePreviousCount) {
+//                            gpsUsagePreviousCount = gpsUsageCount;
+//                            return true;
+//                        }else {
+//                            System.out.println("[AdbUtils -> isUsingGPS$ FATAL ERROR. GPS activity count in previous slot is more than the current time slot!");
+//                            return false;
+//                        }
+//                    }
+//
+//                }else if (counterOFF != counterAPK) {
+//                    gpsActiveInPreviousSlot = true;
+//                    return true;
+//                }else {
+//                    return false;
+//                }
+
 
                 String line;
                 int counterAPK = 0;
-                int counterGPS = 0;
+                int counterOFF = 0;
                 while ((line = reader.readLine()) != null) {
                     if (line.contains(appPackageName)) {
                         packageVisited = true;
@@ -449,20 +619,19 @@ public class AdbUtils {
 
                     if (line.contains("OFF")) {
                         gpsOffVisited = true;
-                        counterGPS++;
-                    }
-
-                    //If both are visited we can stop the loop because the result is achieved and false should be returned
-                    if (counterGPS >= 1 && counterAPK >= 1) {
-                        break;
+                        counterOFF++;
                     }
                 }
 
                 reader.close();
-                /*The expression evaluates to true only if:
-                packageVisited is true, and
-                gpsOffVisited is false.*/
-                return packageVisited && !gpsOffVisited;
+
+                if (counterOFF == counterAPK) {
+                    return false;
+                }else if (counterOFF != counterAPK) {
+                    return true;
+                }else {
+                    return false;
+                }
 
             } else {
                 System.out.println("[AdbUtils -> isUsingGPS$ FATAL ERROR. Failed to get location status process.");
@@ -474,6 +643,125 @@ public class AdbUtils {
             return false;
         }
     }
+
+//    /* *****************************************************************
+//     * For checking Video component
+//     * isUsingGPS
+//     ****************************************************************** */
+//
+//    //returns true if the application is using the GPS, otherwise it returns false
+//    public static boolean isVideoPlaying(String appPackageName) {
+//        try {
+//            ProcessBuilder pb = new ProcessBuilder(adbPath, "shell", "dumpsys", "location", "|", "grep", "\"gps", "provider", "request\"");
+//            Process pbProcess = pb.start();
+//
+//            boolean packageVisited = false;
+//            boolean gpsOffVisited = false;
+//
+//            if (pbProcess != null) {
+//                BufferedReader reader = new BufferedReader(new InputStreamReader(pbProcess.getInputStream()));
+//
+////                String line;
+////                boolean gpsFound = false;
+////                while ((line = reader.readLine()) != null) {
+////                    if(gpsFound){
+////                        //Test
+////                        if (line.contains(appPackageName)) {//Cellular data
+////                            //System.out.println("[AdbUtils -> isUsingGPS$ GPS is used");
+////                            gpsFound = false;
+////                            return true;
+////                        }
+////                    }
+////                    if (line.contains("gps provider:")) {
+////                        gpsFound = true;
+////                    }
+////                }
+//
+//
+////                // PREVIOUS VERSION
+////                String line;
+////                int counterAPK = 0;
+////                int counterGPS = 0;
+////                while ((line = reader.readLine()) != null) {
+////                    if (line.contains(appPackageName)) {
+////                        packageVisited = true;
+////                        counterAPK++;
+////                    }
+////
+////                    if (line.contains("OFF")) {
+////                        gpsOffVisited = true;
+////                        counterGPS++;
+////                    }
+////
+////                    //If both are visited we can stop the loop because the result is achieved and false should be returned
+////                    if (counterGPS >= 1 && counterAPK >= 1) {
+////                        break;
+////                    }
+////                }
+////
+////                reader.close();
+////                /*The expression evaluates to true only if:
+////                packageVisited is true, and
+////                gpsOffVisited is false.*/
+////                return packageVisited && !gpsOffVisited;
+//
+//                String line;
+//                int counterAPK = 0;
+//                int counterOFF = 0;
+//                while ((line = reader.readLine()) != null) {
+//                    if (line.contains(appPackageName)) {
+//                        packageVisited = true;
+//                        counterAPK++;
+//                    }
+//
+//                    if (line.contains("OFF")) {
+//                        gpsOffVisited = true;
+//                        counterOFF++;
+//                    }
+//
+////                    //If both are visited we can stop the loop because the result is achieved and false should be returned
+////                    if (counterGPS >= 1 && counterAPK >= 1) {
+////                        break;
+////                    }
+//                }
+//
+//                reader.close();
+//
+//                if (counterOFF == counterAPK) {
+//                    gpsUsageCount = counterOFF;
+//                    if(gpsActiveInPreviousSlot) {
+//                        gpsUsagePreviousCount = gpsUsageCount;
+//                        gpsActiveInPreviousSlot = false;
+//                        return false;
+//                    }else {
+//                        if (gpsUsageCount == gpsUsagePreviousCount) {
+//                            return false;
+//                        }else if (gpsUsageCount > gpsUsagePreviousCount) {
+//                            gpsUsagePreviousCount = gpsUsageCount;
+//                            return true;
+//                        }else {
+//                            System.out.println("[AdbUtils -> isUsingGPS$ FATAL ERROR. GPS activity count in previous slot is more than the current time slot!");
+//                            return false;
+//                        }
+//                    }
+//
+//                }else if (counterOFF != counterAPK) {
+//                    gpsActiveInPreviousSlot = true;
+//                    return true;
+//                }else {
+//                    return false;
+//                }
+//
+//            } else {
+//                System.out.println("[AdbUtils -> isUsingGPS$ FATAL ERROR. Failed to get location status process.");
+//                return false;
+//            }
+//        } catch (Exception e){
+//            e.printStackTrace();
+//            System.out.println("[AdbUtils -> isUsingGPS$ FATAL ERROR: IO Error. Failed to get location status");
+//            return false;
+//        }
+//    }
 
     /* *****************************************************************
     * For checking display/screen component

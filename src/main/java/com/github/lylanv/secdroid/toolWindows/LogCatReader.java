@@ -1,6 +1,5 @@
 package com.github.lylanv.secdroid.toolWindows;
 
-import com.android.tools.r8.M;
 import com.github.lylanv.secdroid.events.ApplicationStartedEvent;
 import com.github.lylanv.secdroid.events.ApplicationStoppedEvent;
 import com.github.lylanv.secdroid.events.BuildSuccessEvent;
@@ -10,6 +9,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.sql.Struct;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 import com.github.lylanv.secdroid.inspections.*;
 import com.github.lylanv.secdroid.utils.TwoStringKey;
@@ -57,6 +57,8 @@ public class LogCatReader implements Runnable {
 
     String applicationPackageName;
 
+    private static int packagePid = -1;
+
     private boolean isOutputReady = false;
 
     // These variables are added to be able to calculate the energy consumption of HW components for each method
@@ -66,15 +68,20 @@ public class LogCatReader implements Runnable {
 
 
     public LogCatReader() {
-        this.timer = new Timer();
-
         //ERROR
         while (applicationPackageName == null) {
             applicationPackageName = LogcatAnalyzerToolWindowFactory.getPackageName();
         }
 
+
+
+        this.timer = new Timer();
+        updateLineGraph();
+
+
         //TEST : Commented
-        updateLineGraph(); // I called it here to have it as an ongoing continuous graph
+        //this.timer = new Timer();
+        //updateLineGraph(); // I called it here to have it as an ongoing continuous graph
     }
 
 
@@ -214,12 +221,15 @@ public class LogCatReader implements Runnable {
                 }else {
 
                     //monitorInitialStatusOfHW(applicationPackageName);
-                    monitoringInitialStatusOfNetwork();
+                    Map<String,Integer[]> tempMAP = monitoringStatusOfNetwork(applicationPackageName);
+                    if (tempMAP != null){
+                        networkInitialUsageMap = tempMAP;
+                    }
+
 
                 }
 
             }
-
 
             //Gets the logcat file to be able to process it
             Process logcatProcess = AdbUtils.getLogCatFile();
@@ -253,7 +263,7 @@ public class LogCatReader implements Runnable {
 
                 System.out.println("[GreenEdge -> LogCatReader$ Reading the LogCat file...");
 
-                Map<TwoStringKey, Integer> numberOfRunningEachMethodMap = new HashMap<>();
+                Map<TwoStringKey, MethodInfo> methodMap = new HashMap<>();
 
                 BufferedReader logcatReader = new BufferedReader(new InputStreamReader(logcatProcess.getInputStream()));
 
@@ -290,17 +300,16 @@ public class LogCatReader implements Runnable {
                                 //TEST
                                 //LogcatAnalyzerToolWindowFactory.updateLineGraph(energyConsumption); //Update the line graph
                                 batteryChangedFlag = true;
-                                batteryStamp = batteryStamp + Singleton.redAPICalls.get(extractedAPICallName);;
+                                batteryStamp = batteryStamp + Singleton.redAPICalls.get(extractedAPICallName);
 
                                 LogcatAnalyzerToolWindowFactory.updateBarChart(redAPIsCount.getOrDefault(extractedAPICallName,1),extractedAPICallName,extractedAPICallName); //Update the bar chart
                             } else {
                                 AdbUtils.stopEmulator();
                             }
 
-                        }else{
-                            //Log statement is for Start or End of a method
-                            if(getThirdElementOfLogStatement(line).contains(MethodStartTAG)){
+                        }else{ //Log statement is for Start or End of a method
 
+                            if(getThirdElementOfLogStatement(line).contains(MethodStartTAG)){
                                 //Extract elements
                                 String firstElement = getFirstElementOfLogStatement(line);
                                 String secondElement = getSecondElementOfLogStatement(line);
@@ -308,9 +317,15 @@ public class LogCatReader implements Runnable {
                                 //To calculate the energy consumption of hardware components for methods
 //                                MethodInfo methodInfo = new MethodInfo(firstElement,secondElement,System.currentTimeMillis(), AdbUtils.isCameraOn(),AdbUtils.isUsingGPS(applicationPackageName),
 //                                        AdbUtils.isScreenOn(),AdbUtils.getScreenBrightnessLevel(),AdbUtils.isBluetoothConnected(),checkNetwork(applicationPackageName));
-                                MethodInfo methodInfo = new MethodInfo(firstElement,secondElement,System.currentTimeMillis(), batteryLevel);
-                                stack.push(methodInfo);
 
+                                long startTimeTemp = System.currentTimeMillis();
+                                MethodInfo methodInfo = new MethodInfo(firstElement,secondElement,startTimeTemp, batteryLevel);
+                                Map<String,Integer[]> tempNetworkStatusMap = monitoringStatusOfNetwork(applicationPackageName);
+                                if (tempNetworkStatusMap != null){
+                                    methodInfo.setNetworkPacketsStart(tempNetworkStatusMap);
+                                }
+
+                                stack.push(methodInfo);
 
 //                                TwoStringKey key = new TwoStringKey(secondElement, firstElement);
 //                                Double energy = Singleton.methodsAPICallsTotalEnergyCostMap.get(key);
@@ -335,18 +350,18 @@ public class LogCatReader implements Runnable {
 //                                    LogcatAnalyzerToolWindowFactory.addOrUpdateTableRow(key1,key2,rowData);
 //                                }
 
-
                             } else if (getThirdElementOfLogStatement(line).contains(MethodEndTAG)) {
 
                                 MethodInfo methodInfo = stack.pop();
                                 long totalTime = System.currentTimeMillis() - methodInfo.getStartTime();
                                 long selfTime = totalTime - methodInfo.getNestedTime();
-                                long selfTimeSeconds = selfTime / 1000;
+                                double selfTimeSeconds = ((double) selfTime)/ 1000;
+                                //long selfTimeSeconds = selfTime / 1000;
 
                                 double batteryChargeStamp = methodInfo.getBatteryCharge();
 
                                 if (!stack.isEmpty()) {
-                                    Long updatedNestedTime = stack.peek().getNestedTime() + totalTime;;
+                                    Long updatedNestedTime = (stack.peek().getNestedTime()) + totalTime;
                                     stack.peek().setNestedTime(updatedNestedTime);
                                 }
 
@@ -360,98 +375,134 @@ public class LogCatReader implements Runnable {
                                 TwoStringKey key = new TwoStringKey(secondElement, firstElement);
 
                                 Double hwBatteryConsumptionValue = 0.0;
-                                if (hwBatteryConsumption.containsKey(key)) {
+                                if (hwBatteryConsumption != null && hwBatteryConsumption.containsKey(key)) {
                                     hwBatteryConsumptionValue = hwBatteryConsumption.get(key);
                                 }
 
                                 double batteryChargeHelper = 0;
 
                                 // Camera
-                                if (AdbUtils.isCameraOn() || methodInfo.isCameraStatusStart()){
-
-                                    hwBatteryConsumptionValue += batteryPercentage(PowerXML.getCameraAvg(),selfTimeSeconds,batteryChargeStamp);
-
+                                //if (AdbUtils.isCameraOn() || methodInfo.isCameraStatusStart()){
+                                if (AdbUtils.isCameraOn()){
                                     batteryChargeHelper = batteryPercentage(PowerXML.getCameraAvg(),selfTimeSeconds,batteryChargeStamp);
-                                    batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
+                                    hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
 
-//                                    //TODO: check with prof. Paulo that if I need to consider screen energy consumption when camera is on!
-//                                    int brightnessLevelOfScreen = AdbUtils.getScreenBrightnessLevel();
-//                                    if (brightnessLevelOfScreen != -1){
-//                                        hwBatteryConsumptionValue += (batteryPercentage(PowerXML.getScreenOn(), selfTimeSeconds) + batteryPercentage((PowerXML.getScreenFull() * (brightnessLevelOfScreen) / 255), selfTime));
-//                                    }else {
-//                                        hwBatteryConsumptionValue += (batteryPercentage(PowerXML.getScreenOn(), selfTimeSeconds));
-//                                    }
+                                    batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
                                 }
 
                                 //GPS
-                                if (AdbUtils.isUsingGPS(applicationPackageName) || methodInfo.isCameraStatusStart()){
-                                    hwBatteryConsumptionValue += batteryPercentage(PowerXML.getGpsOn(),selfTimeSeconds,batteryChargeStamp);
+                                if (AdbUtils.isUsingGPS(applicationPackageName)){
+                                    batteryChargeHelper = batteryPercentage(PowerXML.getGpsOn(),selfTimeSeconds,batteryChargeStamp);
+                                    hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
 
-                                    batteryChargeHelper = batteryPercentage(PowerXML.getCameraAvg(),selfTimeSeconds,batteryChargeStamp);
                                     batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
                                 }
 
                                 //Screen
-                                if (AdbUtils.isScreenOn() || methodInfo.isCameraStatusStart()){
+                                if (AdbUtils.isScreenOn()){
                                     double brightnessLevelOfScreen = AdbUtils.getScreenBrightnessLevel();
                                     if (brightnessLevelOfScreen != -1){
-                                        hwBatteryConsumptionValue += (batteryPercentage(PowerXML.getScreenOn(), selfTimeSeconds,batteryChargeStamp) + batteryPercentage((PowerXML.getScreenFull() * (brightnessLevelOfScreen) / 255), selfTime, batteryChargeStamp));
+                                        batteryChargeHelper = (batteryPercentage(PowerXML.getScreenOn(),selfTimeSeconds,batteryChargeStamp) + batteryPercentage((PowerXML.getScreenFull() * (brightnessLevelOfScreen) / 255), selfTimeSeconds, batteryChargeStamp));
 
-                                        batteryChargeHelper = batteryPercentage(PowerXML.getCameraAvg(),selfTimeSeconds,batteryChargeStamp);
+                                        hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
+
                                         batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
 
                                     }else {
-                                        hwBatteryConsumptionValue += (batteryPercentage(PowerXML.getScreenOn(), selfTimeSeconds,batteryChargeStamp));
+//                                        hwBatteryConsumptionValue += (batteryPercentage(PowerXML.getScreenOn(), selfTimeSeconds,batteryChargeStamp));
+//
+//                                        batteryChargeHelper = batteryPercentage(PowerXML.getCameraAvg(),selfTimeSeconds,batteryChargeStamp);
 
-                                        batteryChargeHelper = batteryPercentage(PowerXML.getCameraAvg(),selfTimeSeconds,batteryChargeStamp);
+                                        batteryChargeHelper = batteryPercentage(PowerXML.getScreenOn(),selfTimeSeconds,batteryChargeStamp);
+
+                                        hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
+
                                         batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
                                     }
                                 }
-                                //Bluetooth
-                                if (AdbUtils.isBluetoothConnected() || methodInfo.isCameraStatusStart()){
-                                    hwBatteryConsumptionValue += batteryPercentage(PowerXML.getBluetoothActive(),selfTimeSeconds,batteryChargeStamp);
 
-                                    batteryChargeHelper = batteryPercentage(PowerXML.getCameraAvg(),selfTimeSeconds,batteryChargeStamp);
+                                //Bluetooth
+                                if (AdbUtils.isBluetoothConnected()){
+                                    batteryChargeHelper = batteryPercentage(PowerXML.getBluetoothActive(),selfTimeSeconds,batteryChargeStamp);
+                                    hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
+
                                     batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
                                 }
+
                                 //Network
                                 if (methodInfo.getNetworkPacketsStart() != null){
                                     if (!methodInfo.getNetworkPacketsStart().isEmpty()){
                                         //Network (Cellular data and Wi-Fi) battery consumption
                                         Map<String,Integer[]> networkPacketsAtStart = methodInfo.getNetworkPacketsStart();
-                                        Map<String,Integer[]> networkCurrentPackets = checkNetwork(applicationPackageName);
-                                        if (networkCurrentPackets !=null) {
-                                            for (Map.Entry<String,Integer[]> entryCurrent: networkCurrentPackets.entrySet()) {
-                                                for (Map.Entry<String,Integer[]> entryInitial: networkPacketsAtStart.entrySet()){
-                                                    if (entryCurrent.getKey() == entryInitial.getKey()) {
-                                                        if (entryCurrent.getValue()[0] - entryInitial.getValue()[0] > 0 || entryCurrent.getValue()[1] - entryInitial.getValue()[1] > 0) {
-                                                            //Calculation of battery consumption
-                                                            //Application is using network calculate based on the power
-                                                            //wlan0 -> Wi-Fi
-                                                            //eth0 -> cellular data
-                                                            if (entryCurrent.getKey().contains("wlan0")){ // Wi-Fi
-                                                                hwBatteryConsumptionValue += batteryPercentage(PowerXML.getWifiActive(),selfTimeSeconds,batteryChargeStamp);
+                                        Map<String,Integer[]> networkCurrentPackets = monitoringStatusOfNetwork(applicationPackageName);
+                                        if (networkCurrentPackets != null && networkCurrentPackets != null) {
+                                            if (networkCurrentPackets.size() > 0 && networkPacketsAtStart.size() > 0){
+                                                for (Map.Entry<String,Integer[]> entryCurrent: networkCurrentPackets.entrySet()) {
+                                                    for (Map.Entry<String,Integer[]> entryInitial: networkPacketsAtStart.entrySet()){
+                                                        if (entryCurrent.getKey().contains(entryInitial.getKey())) {
+                                                            if (entryCurrent.getValue()[0] - entryInitial.getValue()[0] > 0 || entryCurrent.getValue()[1] - entryInitial.getValue()[1] > 0) {
+                                                                //Calculation of battery consumption
+                                                                //Application is using network calculate based on the power
+                                                                //wlan0 -> Wi-Fi
+                                                                //eth0 -> cellular data
+                                                                if (entryCurrent.getKey().contains("wlan0")){ // Wi-Fi
+                                                                    batteryChargeHelper = batteryPercentage(PowerXML.getWifiActive(),selfTimeSeconds,batteryChargeStamp);
+                                                                    hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
 
-                                                                batteryChargeHelper = batteryPercentage(PowerXML.getCameraAvg(),selfTimeSeconds,batteryChargeStamp);
-                                                                batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
-                                                            }else if (entryCurrent.getKey().contains("eth0")){// Cellular data
-                                                                hwBatteryConsumptionValue += batteryPercentage(PowerXML.getRadioActive(),selfTimeSeconds,batteryChargeStamp);
+                                                                    batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
 
-                                                                batteryChargeHelper = batteryPercentage(PowerXML.getCameraAvg(),selfTimeSeconds,batteryChargeStamp);
-                                                                batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
+                                                                }else if (entryCurrent.getKey().contains("eth0")){// Cellular data
+                                                                    batteryChargeHelper = batteryPercentage(PowerXML.getRadioActive(),selfTimeSeconds,batteryChargeStamp);
+                                                                    hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
+
+                                                                    batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
+                                                                }
                                                             }
                                                         }
                                                     }
                                                 }
+                                            }else if (networkPacketsAtStart.size() == 0 && networkCurrentPackets.size() != 0){
+                                                for (Map.Entry<String,Integer[]> entryCurrent: networkCurrentPackets.entrySet()){
+                                                    if (entryCurrent.getKey().contains("wlan0")){ // Wi-Fi
+                                                        batteryChargeHelper = batteryPercentage(PowerXML.getWifiActive(),selfTimeSeconds,batteryChargeStamp);
+                                                        hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
+
+                                                        batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
+
+                                                    }else if (entryCurrent.getKey().contains("eth0")){// Cellular data
+                                                        batteryChargeHelper = batteryPercentage(PowerXML.getRadioActive(),selfTimeSeconds,batteryChargeStamp);
+                                                        hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
+
+
+                                                        batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
+                                                    }
+                                                }
+                                            }else if (networkPacketsAtStart.size() == 0 && networkCurrentPackets.size() == 0){
+                                                System.out.println("[GreenEdge -> LogCatReader -> run$ Fatal Error: Initial and Current network status is not available!");
                                             }
                                         }
 
                                     }
                                 }
 
-                                hwBatteryConsumption.put(key,hwBatteryConsumptionValue);
+                                /*
+                                * [LogCatReader -> LogCatReader$ FATAL ERROR: I/O Exception. Failed to analyze the logcat file in Run() method.
+                                * java.lang.NullPointerException: Cannot invoke "java.util.Map.put(Object, Object)" because "this.hwBatteryConsumption" is null
+	                            * at com.github.lylanv.secdroid.toolWindows.LogCatReader.run(LogCatReader.java:452)
+	                            * at java.base/java.lang.Thread.run(Unknown Source)*/
+                                if (hwBatteryConsumption == null){
+                                    hwBatteryConsumption = new HashMap<>();
+                                    hwBatteryConsumption.put(key,hwBatteryConsumptionValue);
+                                } else {
+                                    if (hwBatteryConsumption.containsKey(key)){
+                                        hwBatteryConsumption.replace(key, hwBatteryConsumptionValue);
+                                    }else {
+                                        hwBatteryConsumption.put(key, hwBatteryConsumptionValue);
+                                    }
 
+                                }
 
+                                //hwBatteryConsumption.put(key,hwBatteryConsumptionValue);
 
                                 //API calls
                                 Double energy = Singleton.methodsAPICallsTotalEnergyCostMap.get(key);
@@ -460,6 +511,10 @@ public class LogCatReader implements Runnable {
                                     energy = 0.0;
                                 }
 
+                                //TODO - IMP
+                                //java.lang.NullPointerException: Cannot invoke "java.util.Map.isEmpty()" because "this.currentMethodEnergyUsageMap" is null
+                                //	at com.github.lylanv.secdroid.toolWindows.LogCatReader.run(LogCatReader.java:514)
+                                //	at java.base/java.lang.Thread.run(Unknown Source)
                                 if (currentMethodEnergyUsageMap.isEmpty()) {
                                     currentMethodEnergyUsageMap.put(key, energy);
                                     Object[] rowData = {key1, key2, energy, hwBatteryConsumptionValue};
@@ -567,6 +622,11 @@ public class LogCatReader implements Runnable {
 
         timer.cancel();
 
+        packagePid = -1;
+//        AdbUtils.gpsUsagePreviousCount = 0;
+//        AdbUtils.gpsUsageCount = 0;
+//        AdbUtils.gpsActiveInPreviousSlot = false;
+
         EventBusManager.unregister(this);
 
     }
@@ -578,66 +638,77 @@ public class LogCatReader implements Runnable {
      * ********************************************************************************************************
      * */
 
-    private void monitoringInitialStatusOfNetwork() {
+    private Map<String,Integer[]> monitoringStatusOfNetwork(String appPkgName) {
 
-        //check network
-        networkInitialUsageMap = checkNetwork(applicationPackageName);
+        packagePid = AdbUtils.getPackagePid(appPkgName);
+        return AdbUtils.numberOfPackagePackets(packagePid);
+
+//        //check network
+//        networkInitialUsageMap = checkNetwork(applicationPackageName);
 
     }
 
-    private void monitorInitialStatusOfHW(String applicationPackageName) {
-        networkInitialUsageMap = checkNetwork(applicationPackageName);
-        gpsStatus_initial = AdbUtils.isUsingGPS(applicationPackageName);
-        displayStatus_initial = AdbUtils.isAppCurrentFocusOFScreen(applicationPackageName);
-        cameraStatus_initial = AdbUtils.isCameraOn();
+//    private void monitorInitialStatusOfHW(String applicationPackageName) {
+//        networkInitialUsageMap = checkNetwork(applicationPackageName);
+//        gpsStatus_initial = AdbUtils.isUsingGPS(applicationPackageName);
+//        displayStatus_initial = AdbUtils.isAppCurrentFocusOFScreen(applicationPackageName);
+//        cameraStatus_initial = AdbUtils.isCameraOn();
+//
+//        //TEST
+//        System.out.println("[GreenEdge -> LogCatReader$ gpsStatus_initial " + gpsStatus_initial);
+//        System.out.println("[GreenEdge -> LogCatReader$ displayStatus_initial " + displayStatus_initial);
+//        System.out.println("[GreenEdge -> LogCatReader$ cameraStatus_initial" + cameraStatus_initial);
+//    }
+//
+//    private void monitorCurrentStatusOfHW(String applicationPackageName) {
+//        networkCurrentUsageMap = checkNetwork(applicationPackageName);
+//        gpsStatus_current = AdbUtils.isUsingGPS(applicationPackageName);
+//        displayStatus_current = AdbUtils.isAppCurrentFocusOFScreen(applicationPackageName);
+//        cameraStatus_current = AdbUtils.isCameraOn();
+//
+//        //TEST
+//        System.out.println("[GreenEdge -> LogCatReader$ gpsStatus_current " + gpsStatus_current);
+//        System.out.println("[GreenEdge -> LogCatReader$ displayStatus_current " + displayStatus_current);
+//        System.out.println("[GreenEdge -> LogCatReader$ cameraStatus_current" + cameraStatus_current);
+//    }
 
-        //TEST
-        System.out.println("[GreenEdge -> LogCatReader$ gpsStatus_initial " + gpsStatus_initial);
-        System.out.println("[GreenEdge -> LogCatReader$ displayStatus_initial " + displayStatus_initial);
-        System.out.println("[GreenEdge -> LogCatReader$ cameraStatus_initial" + cameraStatus_initial);
-    }
-
-    private void monitorCurrentStatusOfHW(String applicationPackageName) {
-        networkCurrentUsageMap = checkNetwork(applicationPackageName);
-        gpsStatus_current = AdbUtils.isUsingGPS(applicationPackageName);
-        displayStatus_current = AdbUtils.isAppCurrentFocusOFScreen(applicationPackageName);
-        cameraStatus_current = AdbUtils.isCameraOn();
-
-        //TEST
-        System.out.println("[GreenEdge -> LogCatReader$ gpsStatus_current " + gpsStatus_current);
-        System.out.println("[GreenEdge -> LogCatReader$ displayStatus_current " + displayStatus_current);
-        System.out.println("[GreenEdge -> LogCatReader$ cameraStatus_current" + cameraStatus_current);
-    }
-
-
-
-    private Map<String, Integer[]> checkNetwork(String applicationPackageName) {
-
-        String connectedInterface =  AdbUtils.isNetworkConnected();
-        if (connectedInterface != null) {
-            if (!connectedInterface.contains("Idle timers")) {
-                boolean networkConnectionEstablished = AdbUtils.isNetworkConnectionEstablished();
-
-                if (networkConnectionEstablished) {
-                    //System.out.println("[LogCatReader -> checkNetwork$ There is an active/established network connection.");
-                    if (AdbUtils.isPackageUsingNetwork(applicationPackageName)) {
-                        //System.out.println("[LogCatReader -> checkNetwork$ There is an active/established network connection for this application.");
-                        if (AdbUtils.numberOfPackets() != null) {
-                            //System.out.println("[ALogCatReader -> checkNetwork$ Returning number of packets.");
-                            return AdbUtils.numberOfPackets();
-                        }else {
-                            System.out.println("[LogCatReader -> checkNetwork$ Problem in extracting number of packets for this application.");
-                        }
-                    }
-
-                }
-
-            }
-
-        }
-
-        return null;
-    }
+//    private Map<String, Integer[]> checkNetwork(String applicationPackageName) {
+//
+//        String connectedInterface =  AdbUtils.isNetworkConnected();
+//        if (connectedInterface != null) {
+//            System.out.println("[LogCatReader -> checkNetwork$ NETWORK is CONNECTED");
+//            if (!connectedInterface.contains("Idle timers")) {
+//                boolean networkConnectionEstablished = AdbUtils.isNetworkConnectionEstablished();
+//
+//                if (networkConnectionEstablished) {
+//                    System.out.println("[LogCatReader -> checkNetwork$ NETWORK CONNECTION ESTABLISHED!");
+//                    //System.out.println("[LogCatReader -> checkNetwork$ There is an active/established network connection.");
+//                    if (AdbUtils.isPackageUsingNetwork(applicationPackageName)) {
+//                        System.out.println("[LogCatReader -> checkNetwork$ PACKAGE USING NETWORK!");
+//                        //System.out.println("[LogCatReader -> checkNetwork$ There is an active/established network connection for this application.");
+//                        if (AdbUtils.numberOfPackets() != null) {
+//                            //System.out.println("[ALogCatReader -> checkNetwork$ Returning number of packets.");
+//                            System.out.println("[LogCatReader -> checkNetwork$ NUMBER OF PACKETS " + AdbUtils.numberOfPackets());
+//                            return AdbUtils.numberOfPackets();
+//                        }else {
+//                            System.out.println("[LogCatReader -> checkNetwork$ Problem in extracting number of packets for this application.");
+//                        }
+//                    }
+//
+//                }else {
+//                    System.out.println("[LogCatReader -> checkNetwork$ NETWORK CONNECTION IS NOT ESTABLISHED!");
+//                }
+//
+//            }else {
+//                System.out.println("[LogCatReader -> checkNetwork$ NETWORK is IDLE");
+//            }
+//
+//        }else {
+//            System.out.println("[LogCatReader -> checkNetwork$ NETWORK is NOT CONNECTED! CHECK ADB!");
+//        }
+//
+//        return null;
+//    }
 
 
     /*
@@ -648,6 +719,7 @@ public class LogCatReader implements Runnable {
 
     //To update the line graph periodically even without new energy consumptions value
     public void updateLineGraph() {
+        System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph");
         timer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
@@ -656,13 +728,17 @@ public class LogCatReader implements Runnable {
 
                     //If application package name is still null try to get it
                     if(applicationPackageName == null){
+                        System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$  Package is null, trying to get it.");
                         applicationPackageName = LogcatAnalyzerToolWindowFactory.getPackageName();
+                        System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$  Package is " + applicationPackageName);
                     }
 
 
                     if (batteryLevel > 0 ) {
 
-                        //TEST
+                        //System.out.println("____________________ START ___________________");
+
+                        //Reflects the battery consumption of the Android API calls
                         if (batteryChangedFlag){
                             batteryChangedFlag = false;
                             batteryLevel = batteryLevel - batteryStamp;
@@ -671,8 +747,27 @@ public class LogCatReader implements Runnable {
 
                         //Camera battery consumption
                         if (AdbUtils.isCameraOn()){
+
+//                            System.out.println("CAMERA getCameraAvg: " + PowerXML.getCameraAvg() + "  ++++++++++++++++++++++++");
+//                            double cameraBatteryUsage = batteryPercentageInOneSecond(PowerXML.getCameraAvg());
+//
+//                            System.out.println("CAMERA: " + cameraBatteryUsage + "  ++++++++++++++++++++++++");
+//
+//
+//                            batteryLevel = batteryLevel - cameraBatteryUsage;
+
+
                             batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getCameraAvg());
-                            System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$ CAMERA -> batteryLevel " + batteryLevel);
+
+                            if(AdbUtils.isScreenOn()){
+                                double brightnessLevelOfScreen = AdbUtils.getScreenBrightnessLevel();
+                                if (brightnessLevelOfScreen != -1){
+
+                                    batteryLevel = batteryLevel - (batteryPercentageInOneSecond(PowerXML.getScreenOn()) + batteryPercentageInOneSecond((PowerXML.getScreenFull() * (brightnessLevelOfScreen)/255)));
+                                }else {
+                                    batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getScreenOn());
+                                }
+                            }
 
 //                            //TODO: check with prof. Paulo that if I need to consider screen energy consumption when camera is on!
 //                            int brightnessLevelOfScreen = AdbUtils.getScreenBrightnessLevel();
@@ -685,10 +780,19 @@ public class LogCatReader implements Runnable {
 
                         //Screen battery consumption
                         if (AdbUtils.isAppCurrentFocusOFScreen(applicationPackageName)){
+                            //System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$ SCREEN -> Application is on focus.");
                             double brightnessLevelOfScreen = AdbUtils.getScreenBrightnessLevel();
                             if (brightnessLevelOfScreen != -1){
+//                                double screenBatteryUsage = (batteryPercentageInOneSecond(PowerXML.getScreenOn()) + batteryPercentageInOneSecond((PowerXML.getScreenFull() * (brightnessLevelOfScreen)/255)));
+//                                System.out.println("SCREEN & Bright: " + screenBatteryUsage + "  ++++++++++++++++++++++++");
+//                                batteryLevel = batteryLevel - screenBatteryUsage;
+
                                 batteryLevel = batteryLevel - (batteryPercentageInOneSecond(PowerXML.getScreenOn()) + batteryPercentageInOneSecond((PowerXML.getScreenFull() * (brightnessLevelOfScreen)/255)));
                             }else {
+//                                double screenBatteryUsage = batteryPercentageInOneSecond(PowerXML.getScreenOn());
+//                                System.out.println("SCREEN: " + screenBatteryUsage + "  ++++++++++++++++++++++++");
+//                                batteryLevel = batteryLevel - screenBatteryUsage;
+
                                 batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getScreenOn());
                             }
 
@@ -696,53 +800,157 @@ public class LogCatReader implements Runnable {
 
                         //GPS battery consumption
                         if (AdbUtils.isUsingGPS(applicationPackageName)){
+//                            double gPSBatteryUsage = batteryPercentageInOneSecond(PowerXML.getGpsOn());
+//                            System.out.println("GPS: " + gPSBatteryUsage + "  ++++++++++++++++++++++++");
+//                            batteryLevel = batteryLevel - gPSBatteryUsage;
+
                             batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getGpsOn());
                         }
 
 
                         //Network (Cellular data and Wi-Fi) battery consumption
-                        networkCurrentUsageMap = checkNetwork(applicationPackageName);
-                        //current and initial network info available -> check if updating energy is needed
-                        if (networkCurrentUsageMap !=null && networkInitialUsageMap != null) {
-                            for (Map.Entry<String,Integer[]> entryCurrent: networkCurrentUsageMap.entrySet()) {
-                                for (Map.Entry<String,Integer[]> entryInitial: networkInitialUsageMap.entrySet()){
-                                    if (entryCurrent.getKey() == entryInitial.getKey()) {
-                                        if (entryCurrent.getValue()[0] - entryInitial.getValue()[0] > 0 || entryCurrent.getValue()[1] - entryInitial.getValue()[1] > 0) {
-                                            //Calculation of battery consumption
-                                            //Application is using network calculate based on the power
-                                            //wlan0 -> Wi-Fi
-                                            //eth0 -> cellular data
-                                            if (entryCurrent.getKey().contains("wlan0")){ // Wi-Fi
-                                                batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getWifiActive());
-                                            }else if (entryCurrent.getKey().contains("eth0")){// Cellular data
-                                                batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getRadioActive());
-                                            }
+                        packagePid = AdbUtils.getPackagePid(applicationPackageName);
+                        if (packagePid != -1){
+                            networkCurrentUsageMap = AdbUtils.numberOfPackagePackets(packagePid);
+                            if (networkCurrentUsageMap != null && networkInitialUsageMap != null){
+                                //System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$ Calculating NET is under utilize!");
+                                if (networkInitialUsageMap.size() != 0 && networkCurrentUsageMap.size() != 0){
+                                    //System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$ Calculating NET is under utilize! - OK!");
+                                    for (Map.Entry<String,Integer[]> entryCurrent: networkCurrentUsageMap.entrySet()) {
+                                        //System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$ Calculating NET is under utilize! - networkCurrentUsageMap -> " + entryCurrent.getKey());
+                                        for (Map.Entry<String,Integer[]> entryInitial: networkInitialUsageMap.entrySet()){
+                                            //System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$ Calculating NET is under utilize! - networkInitialUsageMap -> " + entryInitial.getKey());
+                                            if (entryCurrent.getKey().contains(entryInitial.getKey())) {
+                                                //System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$ Calculating NET is under utilize! - Keys are the same!");
+                                                if (entryCurrent.getValue()[0] - entryInitial.getValue()[0] > 0 || entryCurrent.getValue()[1] - entryInitial.getValue()[1] > 0) {
+                                                    //Calculation of battery consumption
+                                                    //Application is using network calculate based on the power
+                                                    //wlan0 -> Wi-Fi
+                                                    //eth0 -> cellular data
+                                                    if (entryCurrent.getKey().contains("wlan0")){ // Wi-Fi
+//                                                        double wifiBatteryUsage = batteryPercentageInOneSecond(PowerXML.getWifiActive());
+//                                                        System.out.println("WIFI: " + wifiBatteryUsage + "  ++++++++++++++++++++++++");
+//                                                        batteryLevel = batteryLevel - wifiBatteryUsage;
 
-                                            //Updating network status
-                                            Integer[] newValues = entryCurrent.getValue();
-                                            Integer[] oldValues = entryInitial.getValue();
+                                                        batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getWifiActive());
+                                                    }else if (entryCurrent.getKey().contains("eth0")){// Cellular data
+//                                                        double cellBatteryUsage = batteryPercentageInOneSecond(PowerXML.getRadioActive());
+//                                                        System.out.println("CELLULAR: " + cellBatteryUsage + "  ++++++++++++++++++++++++");
+//                                                        batteryLevel = batteryLevel - cellBatteryUsage;
+
+                                                        batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getRadioActive());
+                                                    }
+
+                                                    //Updating network status
+                                                    Integer[] newValues = entryCurrent.getValue();
+                                                    Integer[] oldValues = entryInitial.getValue();
 
                                             /* Replacing map value
                                             public V replace(K key, V newValue)
                                             public boolean replace(K key, V oldValue, V newValue)*/
-                                            networkInitialUsageMap.replace(entryCurrent.getKey(), newValues);
+                                                    networkInitialUsageMap.replace(entryCurrent.getKey(), newValues);
+                                                }
+                                            }
                                         }
                                     }
+                                }else if (networkInitialUsageMap.size() == 0 && networkCurrentUsageMap.size() != 0){
+                                    for (Map.Entry<String,Integer[]> entryCurrent: networkCurrentUsageMap.entrySet()){
+                                        if (entryCurrent.getKey().contains("wlan0")){ // Wi-Fi
+
+//                                            double wifiBatteryUsage = batteryPercentageInOneSecond(PowerXML.getWifiActive());
+//                                            System.out.println("WIFI: " + wifiBatteryUsage + "  ++++++++++++++++++++++++");
+//                                            batteryLevel = batteryLevel - wifiBatteryUsage;
+
+                                            batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getWifiActive());
+
+                                        }else if (entryCurrent.getKey().contains("eth0")){// Cellular data
+
+//                                            double cellBatteryUsage = batteryPercentageInOneSecond(PowerXML.getRadioActive());
+//                                            System.out.println("CELLULAR: " + cellBatteryUsage + "  ++++++++++++++++++++++++");
+//                                            batteryLevel = batteryLevel - cellBatteryUsage;
+
+                                            batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getRadioActive());
+                                        }
+                                    }
+                                    networkInitialUsageMap.putAll(networkCurrentUsageMap);
+                                }else if (networkInitialUsageMap.size() == 0 && networkCurrentUsageMap.size() == 0){
+                                    System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$ Fatal Error: Initial and Current network status is not available!");
                                 }
+
+                            }else if (networkCurrentUsageMap != null && networkInitialUsageMap == null) {
+                                System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$ Calculating NET - networkInitialUsageMap NULL!");
+                                //current info available and initial is null -> network is connected and established recently -> update the initial map -> no need to update energy
+                                for (Map.Entry<String,Integer[]> entryCurrent: networkCurrentUsageMap.entrySet()) {
+                                    networkInitialUsageMap.put(entryCurrent.getKey(), entryCurrent.getValue());
+                                }
+                            } else {
+                                System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$ Fatal Error: Current network status is not available!");
                             }
-                        } else if (networkCurrentUsageMap !=null && networkInitialUsageMap == null) {
-                            //current info available and initial is null -> network is connected and established recently -> update the initial map -> no need to update energy
-                            for (Map.Entry<String,Integer[]> entryCurrent: networkCurrentUsageMap.entrySet()) {
-                                networkInitialUsageMap.put(entryCurrent.getKey(), entryCurrent.getValue());
-                            }
+
                         }
+//                        else {
+//                            System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$ Could not get package pid!");
+//                        }
+
+
+//                        networkCurrentUsageMap = checkNetwork(applicationPackageName);
+//                        //current and initial network info available -> check if updating energy is needed
+//                        if (networkCurrentUsageMap !=null && networkInitialUsageMap != null) {
+//                            System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$ Calculating NET is under utilize!");
+//                            for (Map.Entry<String,Integer[]> entryCurrent: networkCurrentUsageMap.entrySet()) {
+//                                for (Map.Entry<String,Integer[]> entryInitial: networkInitialUsageMap.entrySet()){
+//                                    if (entryCurrent.getKey() == entryInitial.getKey()) {
+//                                        if (entryCurrent.getValue()[0] - entryInitial.getValue()[0] > 0 || entryCurrent.getValue()[1] - entryInitial.getValue()[1] > 0) {
+//                                            //Calculation of battery consumption
+//                                            //Application is using network calculate based on the power
+//                                            //wlan0 -> Wi-Fi
+//                                            //eth0 -> cellular data
+//                                            System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$ INTERNET is under utilize!");
+//                                            if (entryCurrent.getKey().contains("wlan0")){ // Wi-Fi
+//                                                System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$ WiFI is under utilize!");
+//                                                batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getWifiActive());
+//                                            }else if (entryCurrent.getKey().contains("eth0")){// Cellular data
+//                                                System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$ CELLULAR DATA is under utilize!");
+//                                                batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getRadioActive());
+//                                            }
+//
+//                                            //Updating network status
+//                                            Integer[] newValues = entryCurrent.getValue();
+//                                            Integer[] oldValues = entryInitial.getValue();
+//
+//                                            /* Replacing map value
+//                                            public V replace(K key, V newValue)
+//                                            public boolean replace(K key, V oldValue, V newValue)*/
+//                                            networkInitialUsageMap.replace(entryCurrent.getKey(), newValues);
+//                                        }
+//                                    }
+//                                }
+//                            }
+//                        } else if (networkCurrentUsageMap !=null && networkInitialUsageMap == null) {
+//                            System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$ Calculating NET - networkInitialUsageMap NULL!");
+//                            //current info available and initial is null -> network is connected and established recently -> update the initial map -> no need to update energy
+//                            for (Map.Entry<String,Integer[]> entryCurrent: networkCurrentUsageMap.entrySet()) {
+//                                networkInitialUsageMap.put(entryCurrent.getKey(), entryCurrent.getValue());
+//                            }
+//                        } else {
+//                            System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$ Calculating NET - networkCurrentUsageMap NULL!");
+//                        }
 
                         //Bluetooth battery consumption
+                        //Bluetooth battery consumption
                         if (AdbUtils.isBluetoothConnected()){
+
+//                            double bluetoothBatteryUsage = batteryPercentageInOneSecond(PowerXML.getBluetoothActive());
+//                            System.out.println("BLUETOOTH: " + bluetoothBatteryUsage + "  ++++++++++++++++++++++++");
+//                            batteryLevel = batteryLevel - bluetoothBatteryUsage;
+
                             batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getBluetoothActive());
                         }
 
 
+//                        System.out.println("____________________ END ___________________");
+
+                        //System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$  Battery level at the end of the update " + batteryLevel);
                         LogcatAnalyzerToolWindowFactory.updateLineGraph(batteryLevel);
 
                     }
@@ -845,6 +1053,7 @@ public class LogCatReader implements Runnable {
         //TEST COMMENTED
         //Battery capacity = 6000 mAh = 21600000 mAs -> 100% battery charge and 100% battery health
         //return  (100*inMilliAmpSecond*duration)/((PowerXML.getStateOfHealth()/100) * (batteryChargeStamp/100) * (PowerXML.getBatteryCapacity()*3600));
+
         return  (100*inMilliAmpSecond*duration)/((PowerXML.getStateOfHealth()/100) * (PowerXML.getBatteryCapacity()*3600));
 
     }

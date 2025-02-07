@@ -61,7 +61,6 @@ public class DroidEC extends AnAction {
 
     @Override
     public void actionPerformed(@NotNull AnActionEvent event) {
-
         System.out.println("[GreenMeter -> actionPerformed$ SECDroid button is clicked");
 
         //Gets the project
@@ -633,11 +632,11 @@ public class DroidEC extends AnAction {
         String endLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodName + "," + className + "," + MethodEnd_TAG + ")\");";
         PsiStatement endLogStatementElement = factory.createStatementFromText(endLogStatement, psiMethod);
 
-        CodeStyleManager codeStyleManager = CodeStyleManager.getInstance(project);
+        //CodeStyleManager codeStyleManager = CodeStyleManager.getInstance(project);
 
 
         //Add the method end log statement
-        WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {
+        WriteCommandAction.runWriteCommandAction(project, () -> {
             methodBody.add(endLogStatementElement);
         });
     }

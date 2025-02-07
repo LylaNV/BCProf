@@ -222,6 +222,7 @@ public class LogcatAnalyzerToolWindowFactory implements ToolWindowFactory {
     // Method to update only the vertical axis value on the line graph
     public static void updateLineGraph(Number yValue) {
         //lineGraphSeries.addOrUpdate(new Second(), yValue.doubleValue());  // X-axis is time; only Y value changes
+        //System.out.println("[GreenEdge -> LogCatAnalyzerToolWindowFactory -> updateLineGraph$  Input Battery level is: " + yValue.doubleValue());
         lineGraphSeries.addOrUpdate(new Second(new java.util.Date(System.currentTimeMillis())), yValue.doubleValue());  // X-axis is time; only Y value changes
     }
 
