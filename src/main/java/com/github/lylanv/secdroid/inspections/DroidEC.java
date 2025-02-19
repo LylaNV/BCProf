@@ -1,6 +1,5 @@
 package com.github.lylanv.secdroid.inspections;
 
-import com.android.tools.r8.L;
 import com.github.lylanv.secdroid.toolWindows.LogcatAnalyzerToolWindowFactory;
 import com.github.lylanv.secdroid.utils.ThreeStringKey;
 import com.github.lylanv.secdroid.utils.TwoStringKey;
