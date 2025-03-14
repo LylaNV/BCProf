@@ -24,12 +24,21 @@
                 id="EnergyActionGroup"
                 description="Energy action group">
             <action
-                    id="com.github.lylanv.secdroid.inspections.DroidEC"
-                    class="com.github.lylanv.secdroid.inspections.DroidEC"
-                    text="DroidEC"
-                    description="Energy profiler button"/>
-            <add-to-group group-id="RunMenu" anchor="last"/>
+                    id="com.github.lylanv.secdroid.actions.DroidEC"
+                    class="com.github.lylanv.secdroid.actions.DroidEC"
+                    text="BCProf Log"
+                    description="Energy profiler button">
+<!--                <add-to-group group-id="RunMenu" anchor="first"/>-->
+            </action>
             <!--add-to-group group-id="ToolsMenu" anchor="first"/-->
+
+            <action
+                    id="com.github.lylanv.secdroid.actions.runButton"
+                    class="com.github.lylanv.secdroid.actions.runButton"
+                    text="BCProf Run"/>
+                <separator/>
+                <add-to-group group-id="RunMenu" anchor="first"/>
+<!--            </action>-->
         </group>
     </actions>
 

@@ -1,4 +1,4 @@
-package com.github.lylanv.secdroid.inspections;
+package com.github.lylanv.secdroid.commands;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;

@@ -1,6 +1,9 @@
-package com.github.lylanv.secdroid.inspections;
+package com.github.lylanv.secdroid.actions;
 
-import com.github.lylanv.secdroid.toolWindows.LogcatAnalyzerToolWindowFactory;
+import com.github.lylanv.secdroid.inspections.BatteryHealthAndCapacityDialog;
+import com.github.lylanv.secdroid.inspections.ImportChecker;
+import com.github.lylanv.secdroid.inspections.PowerXML;
+import com.github.lylanv.secdroid.inspections.Singleton;
 import com.github.lylanv.secdroid.utils.ThreeStringKey;
 import com.github.lylanv.secdroid.utils.TwoStringKey;
 import com.intellij.openapi.actionSystem.AnAction;
@@ -8,11 +11,9 @@ import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.fileChooser.FileChooser;
 import com.intellij.openapi.fileChooser.FileChooserDescriptor;
 import com.intellij.openapi.ui.Messages;
-import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.util.indexing.FileBasedIndex;
 import org.jetbrains.annotations.NotNull;
 
-import com.intellij.ide.highlighter.JavaFileType;
 import com.intellij.openapi.actionSystem.PlatformDataKeys;
 import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.editor.Document;
@@ -21,11 +22,8 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
 import com.intellij.psi.codeStyle.CodeStyleManager;
-import com.intellij.psi.search.FileTypeIndex;
-import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.PsiTreeUtil;
 import org.jetbrains.kotlin.psi.*;
-import org.jetbrains.uast.kotlin.KotlinUBlockExpression;
 
 import java.util.*;
 
