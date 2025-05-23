@@ -10,6 +10,8 @@
     <depends>com.intellij.modules.java-capable</depends>
     <depends>com.intellij.modules.androidstudio</depends>
     <depends>com.android.tools.design</depends>
+    <depends>com.intellij.modules.java</depends>
+
 
     <resource-bundle>messages.MyBundle</resource-bundle>
 

@@ -39,6 +39,7 @@ dependencies {
     implementation("org.jfree:jfreechart:1.5.5")
     //implementation("com.android.tools.ddmlib:ddmlib:23.4.0")
     implementation(kotlin("stdlib"))
+    implementation ("com.google.guava:guava:31.1-jre")
 
 
     // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
@@ -51,7 +52,7 @@ dependencies {
         // Plugin Dependencies. Uses `platformPlugins` property from the gradle.properties file for plugin from JetBrains Marketplace.
         plugins(providers.gradleProperty("platformPlugins").map { it.split(',') })
 
-        instrumentationTools()
+        //instrumentationTools()
         pluginVerifier()
         zipSigner()
         testFramework(TestFrameworkType.Platform)
@@ -153,7 +154,7 @@ intellijPlatformTesting {
                         "-Dide.mac.message.dialogs.as.sheets=false",
                         "-Djb.privacy.policy.text=<!--999.999-->",
                         "-Djb.consents.confirmation.enabled=false",
-                        "-Xmx8G",
+                        "-Xmx16G", //I increased from 8 to 16
                     )
                 }
             }

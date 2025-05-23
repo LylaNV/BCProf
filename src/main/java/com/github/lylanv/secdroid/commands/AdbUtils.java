@@ -1,8 +1,11 @@
 package com.github.lylanv.secdroid.commands;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class AdbUtils {
@@ -974,4 +977,150 @@ public class AdbUtils {
             return false;
         }
     }
+
+
+    /* *****************************************************************
+     * For running application on emulators
+     *
+     ****************************************************************** */
+    public static List<String> getRunningEmulators() {
+        List<String> emulators = new ArrayList<>();
+
+        try {
+
+            ProcessBuilder pb = new ProcessBuilder(adbPath, "devices");
+            Process pbProcess = pb.start();
+
+            if (pbProcess != null) {
+                BufferedReader reader = new BufferedReader(new InputStreamReader(pbProcess.getInputStream()));
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (line.startsWith("emulator-")) {
+                        emulators.add(line.split("\t")[0]);  // Extract emulator ID
+                    }
+                }
+
+                return emulators;
+
+            } else {
+                System.out.println("[AdbUtils -> getRunningEmulators$ Failed to get running emulators");
+                return null;
+            }
+
+        } catch (Exception e){
+            e.printStackTrace();
+            System.out.println("[AdbUtils -> getRunningEmulators$ Exception - Failed to get running emulators");
+            return null;
+        }
+    }
+
+    //Returns ture if the input emulator is current focus -> Also we can conclude that the screen is on because if screen is this will return false
+    // The output of this command is null when the screen is off
+    public static boolean isEmulatorRunningAnotherApp(String emulator, String os) {
+        try {
+
+            ProcessBuilder pb;
+
+            //Check os first
+            if (os == "mac" || os == "linux"){
+                pb = new ProcessBuilder(adbPath, "-s", emulator, "shell", "dumpsys", "window", "|", "grep", "-E", "\"mCurrentFocus\"");
+            }else {
+                pb = new ProcessBuilder(adbPath, "-s", emulator, "shell", "dumpsys", "window", "|", "findstr", "-E", "\"mCurrentFocus\"");
+            }
+
+            Process pbProcess = pb.start();
+
+            if (pbProcess != null) {
+                BufferedReader reader = new BufferedReader(new InputStreamReader(pbProcess.getInputStream()));
+
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (line.contains("com.android.launcher") || line.contains("com.google.android.apps.nexuslauncher") || line.contains("com.android.launcher3")) {//app is the current focus
+                        return false;
+                    }
+                }
+
+                reader.close();
+                return true; //another app is the current focus of the emulator/physical device
+            } else {
+                System.out.println("[AdbUtils -> isEmulatorRunningAnotherApp$ FATAL ERROR. Failed to get focus app on the screen process.");
+                return true;
+            }
+        } catch (Exception e){
+            e.printStackTrace();
+            System.out.println("[AdbUtils -> isEmulatorRunningAnotherApp$ FATAL ERROR: IO Error. Failed to get focus app on the screen.");
+            return true;
+        }
+
+    }
+
+    public static String getEmulatorName(String emulator, String os) {
+        try {
+            ProcessBuilder pb;
+
+            //Check os first
+            if (os == "mac" || os == "linux"){
+                pb = new ProcessBuilder(adbPath, "-s", emulator, "emu", "avd", "name");
+            }else {
+                pb = new ProcessBuilder(adbPath, "-s", emulator, "emu", "avd", "name");
+            }
+
+            Process pbProcess = pb.start();
+
+            if (pbProcess != null) {
+                BufferedReader reader = new BufferedReader(new InputStreamReader(pbProcess.getInputStream()));
+
+                String line;
+                String previousLine = null;
+                String lastLine = null;
+                while ((line = reader.readLine()) != null) {
+                    previousLine = lastLine;
+                    lastLine = line;
+                }
+
+                reader.close();
+
+                if (lastLine.contains("OK") && previousLine != null) {
+                    return previousLine;
+                }else {
+                    System.out.println("[AdbUtils -> getEmulatorName$ FATAL ERROR. The output format does not match the expected format.");
+                    return null;
+                }
+            } else {
+                System.out.println("[AdbUtils -> getEmulatorName$ FATAL ERROR. Failed to get avd name of the running emulator.");
+                return null;
+            }
+        } catch (Exception e){
+            e.printStackTrace();
+            System.out.println("[AdbUtils -> getEmulatorName$ FATAL ERROR: IO Error. Failed to get avd name of the running emulator.");
+            return null;
+        }
+    }
+
+    public static Boolean emulatorBootCompleted(String emulator) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(adbPath, "-s", emulator, "shell", "getprop", "sys.boot_completed");
+            Process pbProcess = pb.start();
+
+            if (pbProcess != null) {
+                BufferedReader reader = new BufferedReader(new InputStreamReader(pbProcess.getInputStream()));
+
+                String line = reader.readLine();
+                if (line == null) {
+                    return false;
+                }else if(line.contains("1")){
+                    return true;
+                }else {
+                    return false;
+                }
+            } else {
+                System.out.println("[AdbUtils -> emulatorBootCompleted$ Failed to get emulator status");
+                return false;
+            }
+        } catch (Exception e){
+            e.printStackTrace();
+            return false;
+        }
+    }
+
 }

@@ -22,6 +22,7 @@ public class LogCatReader implements Runnable {
     private final String TAG = "GreenMeter"; // Logging tag -> will be used to filter the logcat file
     private final String MethodStartTAG = "METHOD_START";
     private final String MethodEndTAG = "METHOD_END";
+    private final double NOMINAL_VOLTAGE = 3.958696693;
 
     private volatile boolean running = true; // Volatile to ensure visibility across threads
 
@@ -547,6 +548,8 @@ public class LogCatReader implements Runnable {
 
         timer.cancel();
 
+        System.gc();
+
         packagePid = -1;
 //        AdbUtils.gpsUsagePreviousCount = 0;
 //        AdbUtils.gpsUsageCount = 0;
@@ -849,7 +852,7 @@ public class LogCatReader implements Runnable {
         return parts[2];
     }
 
-    ////Gets the third element from the logged line (log statements)
+    //Gets the third element from the logged line (log statements)
     private String getThirdElementOfLogStatement(String line) {
         String[] parts = line.split("[(),]");
         return parts[3];
@@ -862,8 +865,13 @@ public class LogCatReader implements Runnable {
 
         //TEST COMMENTED
         //Battery capacity = 6000 mAh = 21600000 mAs -> 100% battery charge and 100% battery health
+        //BATTERY LEVEL CONSIDERED
         //return  (100 * inMilliAmpSecond)/((PowerXML.getStateOfHealth()/100) * (batteryLevel/100) * (PowerXML.getBatteryCapacity()*3600));
-        return  (100 * inMilliAmpSecond)/((PowerXML.getStateOfHealth()/100) * (PowerXML.getBatteryCapacity()*3600));
+        //ORIGINAL
+//        return  (100 * inMilliAmpSecond)/((PowerXML.getStateOfHealth()/100) * (PowerXML.getBatteryCapacity()*3600));
+        //VOLTAGE CONSIDERED
+        double currentVoltage = currentVoltageEstimation(batteryLevel);
+        return  (100 * inMilliAmpSecond * NOMINAL_VOLTAGE)/((PowerXML.getStateOfHealth()/100) * (currentVoltage) * (PowerXML.getBatteryCapacity()*3600));
 
     }
 
@@ -874,10 +882,13 @@ public class LogCatReader implements Runnable {
 
         //TEST COMMENTED
         //Battery capacity = 6000 mAh = 21600000 mAs -> 100% battery charge and 100% battery health
+        //BATTERY LEVEL CONSIDERED
         //return  (100*inMilliAmpSecond*duration)/((PowerXML.getStateOfHealth()/100) * (batteryChargeStamp/100) * (PowerXML.getBatteryCapacity()*3600));
-
-        return  (100*inMilliAmpSecond*duration)/((PowerXML.getStateOfHealth()/100) * (PowerXML.getBatteryCapacity()*3600));
-
+        //ORIGINAL
+//        return  (100*inMilliAmpSecond*duration)/((PowerXML.getStateOfHealth()/100) * (PowerXML.getBatteryCapacity()*3600));
+        //VOLTAGE CONSIDERED
+        double currentVoltage = currentVoltageEstimation(batteryChargeStamp);
+        return  (100 * inMilliAmpSecond*duration * NOMINAL_VOLTAGE)/((PowerXML.getStateOfHealth()/100) * (currentVoltage) * (PowerXML.getBatteryCapacity()*3600));
     }
 
 //    private void fillTheTable(Map<TwoStringKey,Integer> inputNumberOfRunningEachMethodMap) {
@@ -889,4 +900,13 @@ public class LogCatReader implements Runnable {
 //        }
 //
 //    }
+
+    private double currentVoltageEstimation(double soc){
+        double result = (-3.145e-08) * Math.pow(soc, 4)
+                + (6.682e-06) * Math.pow(soc, 3)
+                - 0.0004066 * Math.pow(soc, 2)
+                + 0.01342 * soc
+                + 3.598;
+        return result;
+    }
 }
