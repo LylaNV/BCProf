@@ -28,8 +28,8 @@ To keep everything working, do not remove `<!-- ... -->` sections.
 
 - Using the IDE built-in plugin system:
   
-  <kbd>Settings/Preferences</kbd> > <kbd>Plugins</kbd> > <kbd>Marketplace</kbd> > <kbd>Search for "SECDroid"</kbd> >
-  <kbd>Install</kbd>
+  <kbd>Settings/Preferences</kbd> > <kbd>Plugins</kbd> > <kbd>Marketplace</kbd> > <kbd>Search for "BCProf"</kbd> >
+  <kbd>Install</kbd> > <kbd>Not Activated Yet</kbd>
   
 - Using JetBrains Marketplace:
 
@@ -40,12 +40,6 @@ To keep everything working, do not remove `<!-- ... -->` sections.
 
 - Manually:
 
-  Download the [latest release](https://github.com/LylaNV/SECDroid/releases/latest) and install it manually using
+  Download the [latest release](https://github.com/LylaNV/BCProf/releases/latest) and install it manually using
   <kbd>Settings/Preferences</kbd> > <kbd>Plugins</kbd> > <kbd>⚙️</kbd> > <kbd>Install plugin from disk...</kbd>
 
-
----
-Plugin based on the [IntelliJ Platform Plugin Template][template].
-
-[template]: https://github.com/JetBrains/intellij-platform-plugin-template
-[docs:plugin-description]: https://plugins.jetbrains.com/docs/intellij/plugin-user-experience.html#plugin-description-and-presentation
