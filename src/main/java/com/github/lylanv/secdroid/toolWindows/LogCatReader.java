@@ -23,6 +23,11 @@ public class LogCatReader implements Runnable {
     private final String MethodStartTAG = "METHOD_START";
     private final String MethodEndTAG = "METHOD_END";
     private final double NOMINAL_VOLTAGE = 3.958696693;
+//    private final double VOLTAGE_MAX = 4.42;
+//    private final double VOLTAGE_MIN = 3.56;
+
+    private final double VOLTAGE_MAX = 4.41;
+    private final double VOLTAGE_MIN = 3.56;
 
     private volatile boolean running = true; // Volatile to ensure visibility across threads
 
@@ -871,8 +876,11 @@ public class LogCatReader implements Runnable {
 //        return  (100 * inMilliAmpSecond)/((PowerXML.getStateOfHealth()/100) * (PowerXML.getBatteryCapacity()*3600));
         //VOLTAGE CONSIDERED
         double currentVoltage = currentVoltageEstimation(batteryLevel);
-        return  (100 * inMilliAmpSecond * NOMINAL_VOLTAGE)/((PowerXML.getStateOfHealth()/100) * (currentVoltage) * (PowerXML.getBatteryCapacity()*3600));
-
+        double calculatedBatteryConsumptionAtT = (100 * inMilliAmpSecond * NOMINAL_VOLTAGE)/((PowerXML.getStateOfHealth()/100) * (currentVoltage) * (PowerXML.getBatteryCapacity()*3600));
+        //VOLTAGE CONSIDERED - CORRECT
+//        double voltage = currentVoltageEstimation(batteryLevel);
+//        double calculatedBatteryConsumptionAtT = ((100 * inMilliAmpSecond)/((PowerXML.getStateOfHealth()/100) * (PowerXML.getBatteryCapacity() * 3600))) * (1 + (1 - ((voltage - VOLTAGE_MIN) / (VOLTAGE_MAX - VOLTAGE_MIN))));
+        return calculatedBatteryConsumptionAtT;
     }
 
     private double batteryPercentage(double inMilliAmpSecond, double duration, double batteryChargeStamp) {
@@ -888,7 +896,10 @@ public class LogCatReader implements Runnable {
 //        return  (100*inMilliAmpSecond*duration)/((PowerXML.getStateOfHealth()/100) * (PowerXML.getBatteryCapacity()*3600));
         //VOLTAGE CONSIDERED
         double currentVoltage = currentVoltageEstimation(batteryChargeStamp);
-        return  (100 * inMilliAmpSecond*duration * NOMINAL_VOLTAGE)/((PowerXML.getStateOfHealth()/100) * (currentVoltage) * (PowerXML.getBatteryCapacity()*3600));
+        double calculatedBatteryConsumptionAtTMethod =  (100 * inMilliAmpSecond*duration * NOMINAL_VOLTAGE)/((PowerXML.getStateOfHealth()/100) * (currentVoltage) * (PowerXML.getBatteryCapacity()*3600));
+//        double voltageMethod = currentVoltageEstimation(batteryChargeStamp);
+//        double calculatedBatteryConsumptionAtTMethod = (100*inMilliAmpSecond*duration)/((PowerXML.getStateOfHealth()/100) * (PowerXML.getBatteryCapacity()*3600)) * (1 + (1 - ((voltageMethod - VOLTAGE_MIN) / (VOLTAGE_MAX - VOLTAGE_MIN))));
+        return calculatedBatteryConsumptionAtTMethod;
     }
 
 //    private void fillTheTable(Map<TwoStringKey,Integer> inputNumberOfRunningEachMethodMap) {
@@ -909,4 +920,31 @@ public class LogCatReader implements Runnable {
                 + 3.598;
         return result;
     }
+
+//    private double internalResistance(double soc){
+//        double max = 88;
+//        double min = 65;
+//        if (soc > 90){
+//            return (66 - min)/(max - min);
+//        } else if (soc > 80 && soc <= 90){
+//            return (66 - min)/(max - min);
+//        } else if (soc > 70 && soc <= 80){
+//            return (67 - min)/(max - min);
+//        } else if (soc > 60 && soc <= 70){
+//            return (68 - min)/(max - min);
+//        }else if (soc > 50 && soc <= 60){
+//            return (68 - min)/(max - min);
+//        }else if (soc > 40 && soc <= 50){
+//            return (65 - min)/(max - min);
+//        }else if (soc > 30 && soc <= 40){
+//            return (66 - min)/(max - min);
+//        }else if (soc > 20 && soc <= 30){
+//            return (67 - min)/(max - min);
+//        }else if (soc > 10 && soc <= 20){
+//            return (71 - min)/(max - min);
+//        }else if (soc > 0 && soc <= 10){
+//            return (88 - min)/(max - min);
+//        }
+//
+//    }
 }
