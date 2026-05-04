@@ -1,6 +1,6 @@
 <!-- Keep a Changelog guide -> https://keepachangelog.com -->
 
-# SECDroid Changelog
+# BCProf Changelog
 
 ## [Unreleased]
 ### Added
