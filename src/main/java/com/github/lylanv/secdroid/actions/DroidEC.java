@@ -442,10 +442,27 @@ public class DroidEC extends AnAction {
                         String startLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodName + "," + className + "," + MethodStart_TAG + ")\");";
                         PsiStatement startLogStatementElement = factory.createStatementFromText(startLogStatement,psiMethod);
 
-                        //Add the method start log statement
-                        WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {methodBody.addBefore(startLogStatementElement, methodBody.getFirstBodyElement());});
+//                        //Add the method start log statement
+//                        WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {methodBody.addBefore(startLogStatementElement, methodBody.getFirstBodyElement());});
 
                         PsiStatement[] statements = methodBody.getStatements();
+
+                        //Add the method start log statement
+                        WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {
+
+                            if(psiMethod.isConstructor()&&statements.length>0) {
+                                PsiStatement firstStatement = statements[0];
+                                String firstStatementText = firstStatement.getText();
+
+                                if (firstStatementText.startsWith("super(") || firstStatementText.startsWith("this(")) {
+                                    methodBody.addAfter(startLogStatementElement, firstStatement);
+                                    return;
+                                }
+                            }
+                            methodBody.addBefore(startLogStatementElement, methodBody.getFirstBodyElement());});
+
+
+//                        PsiStatement[] statements = methodBody.getStatements();
                         // Check if the code block has at least one statement
                         if(statements.length > 0) {
                             PsiStatement lastStatement = statements[statements.length - 1]; // Get the last statement
