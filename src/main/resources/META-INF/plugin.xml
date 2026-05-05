@@ -30,17 +30,21 @@
                     class="com.github.lylanv.secdroid.actions.DroidEC"
                     text="BCProf Log"
                     description="Energy profiler button">
-<!--                <add-to-group group-id="RunMenu" anchor="first"/>-->
             </action>
-            <!--add-to-group group-id="ToolsMenu" anchor="first"/-->
 
             <action
                     id="com.github.lylanv.secdroid.actions.runButton"
                     class="com.github.lylanv.secdroid.actions.runButton"
-                    text="BCProf Run"/>
-                <separator/>
-                <add-to-group group-id="RunMenu" anchor="first"/>
-<!--            </action>-->
+                    text="BCProf Run">
+            </action>
+
+            <action
+                    id="com.github.lylanv.secdroid.actions.DeleteLogs"
+                    class="com.github.lylanv.secdroid.actions.DeleteLogs"
+                    text="Delete BCProf Logs"/>
+            <separator/>
+            <add-to-group group-id="RunMenu" anchor="first"/>
+
         </group>
     </actions>
 

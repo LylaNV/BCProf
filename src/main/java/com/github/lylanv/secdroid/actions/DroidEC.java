@@ -450,6 +450,7 @@ public class DroidEC extends AnAction {
                         //Add the method start log statement
                         WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {
 
+                            //Check if method is constructor and the first statement is super or this, add the log statement after them because they must be first statement
                             if(psiMethod.isConstructor()&&statements.length>0) {
                                 PsiStatement firstStatement = statements[0];
                                 String firstStatementText = firstStatement.getText();
@@ -459,6 +460,7 @@ public class DroidEC extends AnAction {
                                     return;
                                 }
                             }
+                            // Add as a first statement in the method
                             methodBody.addBefore(startLogStatementElement, methodBody.getFirstBodyElement());});
 
 
