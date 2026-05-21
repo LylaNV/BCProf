@@ -101,90 +101,122 @@ public class DeleteLogs extends AnAction {
         javaStatementsToDelete = new ArrayList<>();
         kotlinExpressionsToDelete = new ArrayList<>();
 
-        //Gets the classes in each file in the project
+//        //Gets the classes in each file in the project
+//        for (VirtualFile virtualFile : containingFiles) {
+//            /*
+//             * By this "if", we exclude all java and kotlin files that are not in the main folder of the project such as test files
+//             * to be more precise androidTest and test
+//             * Filters the Java files in the project to access the Java files with actual source code of the application
+//             * */
+//            if (virtualFile.getUrl().contains("/src/main")){
+//                PsiManager psiManager = PsiManager.getInstance(project);
+//                PsiFile psiFile = psiManager.findFile(virtualFile);
+//
+//                if (psiFile instanceof PsiJavaFile) {
+//                    psiClasses = convertVirtualFileToPsiClass(project,virtualFile);
+//                    if (psiClasses == null || psiClasses.length == 0) {
+//                        System.out.println("[GreenMeter -> DeleteLogs -> actionPerformed$ Could not retrieve the classes in the file " + virtualFile.getName().trim());
+//                    }else {
+//                        for (PsiClass psiClass : psiClasses) {
+//                            //Get all the methods in the class
+//                            psiMethods = psiClass.getMethods();
+//                            if (psiMethods != null) {
+//                                for (PsiMethod psiMethod : psiMethods) {
+//                                    //Get method body
+//                                    PsiCodeBlock methodBody = psiMethod.getBody();
+//                                    if (methodBody != null) {
+//                                        PsiStatement[] statements = methodBody.getStatements();
+//
+//                                        for (PsiStatement statement : statements) {
+//                                            String text = statement.getText();
+//                                            if (text.contains("Log.d(\"GreenMeter\"")) { //&& (text.contains("METHOD_START") || text.contains("METHOD_END") || text.contains(psiMethod.getName()))
+//                                                javaStatementsToDelete.add(statement);
+//                                            }
+//                                        }
+//                                    }
+//
+//                                }
+//                            }
+//                        }
+//                    }
+//                }else if (psiFile instanceof KtFile) {
+//
+//                    List<KtClass> ktClasses = convertVirtualFileToKotlinClass(project,virtualFile);
+//
+//                    if (ktClasses == null || ktClasses.size() == 0) {
+//                        System.out.println("[GreenMeter -> DeleteLogs -> actionPerformed$ Could not retrieve the classes in the Kotlin file " + virtualFile.getName().trim());
+//                    }else {
+//                        //Extracts the class from the classes list
+//                        for (KtClass kotlinClass : ktClasses) {
+//                            // functions: Holds all the functions inside the input kotlin file and a specific class in that
+//                            List<KtNamedFunction> functions = new ArrayList<>();
+//                            // Get all declarations in the class
+//                            for (KtDeclaration declaration : kotlinClass.getDeclarations()) {
+//                                // Filter for functions
+//                                if (declaration instanceof KtNamedFunction) {
+//                                    functions.add((KtNamedFunction) declaration);
+//                                }
+//                            }
+//
+//                            if (functions.size() > 0) {
+//                                for (KtNamedFunction function : functions) {
+//                                    KtExpression functionBody = function.getBodyExpression();
+//
+//                                    if (functionBody != null) {
+//                                        KtBlockExpression functionBodyBlock = function.getBodyBlockExpression();
+//                                        List<KtExpression> ktExpressions = functionBodyBlock.getStatements();
+//
+//                                        if(ktExpressions.size() > 0) {
+//                                            for (KtExpression ktExpression : ktExpressions) {
+//                                                String textKotlin = ktExpression.getText();
+//                                                if (textKotlin.contains("Log.d(\"GreenMeter\"")) { //&& (textKotlin.contains("METHOD_START") || textKotlin.contains("METHOD_END") || textKotlin.contains(function.getName()))
+//                                                    kotlinExpressionsToDelete.add(ktExpression);
+//                                                }
+//                                            }
+//                                        }
+//                                    }
+//                                }
+//                            }
+//
+//                        }
+//
+//
+//                    }
+//                } else {
+//                    System.out.println("[GreenMeter -> DeleteLogs -> actionPerformed$ Fatal Error: unknown file type: " + virtualFile.getName().trim());
+//                }
+//            }
+//        }
+
+        // Replace your entire file-parsing loop with this:
         for (VirtualFile virtualFile : containingFiles) {
-            /*
-             * By this "if", we exclude all java and kotlin files that are not in the main folder of the project such as test files
-             * to be more precise androidTest and test
-             * Filters the Java files in the project to access the Java files with actual source code of the application
-             * */
-            if (virtualFile.getUrl().contains("/src/main")){
-                PsiManager psiManager = PsiManager.getInstance(project);
+            if (virtualFile.getUrl().contains("/src/main")) {
                 PsiFile psiFile = psiManager.findFile(virtualFile);
+                if (psiFile == null) continue;
 
-                if (psiFile instanceof PsiJavaFile) {
-                    psiClasses = convertVirtualFileToPsiClass(project,virtualFile);
-                    if (psiClasses == null || psiClasses.length == 0) {
-                        System.out.println("[GreenMeter -> DeleteLogs -> actionPerformed$ Could not retrieve the classes in the file " + virtualFile.getName().trim());
-                    }else {
-                        for (PsiClass psiClass : psiClasses) {
-                            //Get all the methods in the class
-                            psiMethods = psiClass.getMethods();
-                            if (psiMethods != null) {
-                                for (PsiMethod psiMethod : psiMethods) {
-                                    //Get method body
-                                    PsiCodeBlock methodBody = psiMethod.getBody();
-                                    if (methodBody != null) {
-                                        PsiStatement[] statements = methodBody.getStatements();
+                // Use a visitor pattern to find all matching statements implicitly
+                psiFile.accept(new PsiRecursiveElementVisitor() {
+                    @Override
+                    public void visitElement(@NotNull PsiElement element) {
+                        super.visitElement(element);
 
-                                        for (PsiStatement statement : statements) {
-                                            String text = statement.getText();
-                                            if (text.contains("Log.d(\"GreenMeter\"")) { //&& (text.contains("METHOD_START") || text.contains("METHOD_END") || text.contains(psiMethod.getName()))
-                                                javaStatementsToDelete.add(statement);
-                                            }
-                                        }
-                                    }
+                        // Handle Java statements
+                        if (element instanceof PsiStatement) {
+                            String text = element.getText();
+                            if (text.contains("Log.d(\"GreenMeter\"")) {
+                                javaStatementsToDelete.add((PsiStatement) element);
+                            }
+                        }
 
-                                }
+                        // Handle Kotlin expressions
+                        else if (element instanceof KtExpression) {
+                            String text = element.getText();
+                            if (text.contains("Log.d(\"GreenMeter\"")) {
+                                kotlinExpressionsToDelete.add((KtExpression) element);
                             }
                         }
                     }
-                }else if (psiFile instanceof KtFile) {
-
-                    List<KtClass> ktClasses = convertVirtualFileToKotlinClass(project,virtualFile);
-
-                    if (ktClasses == null || ktClasses.size() == 0) {
-                        System.out.println("[GreenMeter -> DeleteLogs -> actionPerformed$ Could not retrieve the classes in the Kotlin file " + virtualFile.getName().trim());
-                    }else {
-                        //Extracts the class from the classes list
-                        for (KtClass kotlinClass : ktClasses) {
-                            // functions: Holds all the functions inside the input kotlin file and a specific class in that
-                            List<KtNamedFunction> functions = new ArrayList<>();
-                            // Get all declarations in the class
-                            for (KtDeclaration declaration : kotlinClass.getDeclarations()) {
-                                // Filter for functions
-                                if (declaration instanceof KtNamedFunction) {
-                                    functions.add((KtNamedFunction) declaration);
-                                }
-                            }
-
-                            if (functions.size() > 0) {
-                                for (KtNamedFunction function : functions) {
-                                    KtExpression functionBody = function.getBodyExpression();
-
-                                    if (functionBody != null) {
-                                        KtBlockExpression functionBodyBlock = function.getBodyBlockExpression();
-                                        List<KtExpression> ktExpressions = functionBodyBlock.getStatements();
-
-                                        if(ktExpressions.size() > 0) {
-                                            for (KtExpression ktExpression : ktExpressions) {
-                                                String textKotlin = ktExpression.getText();
-                                                if (textKotlin.contains("Log.d(\"GreenMeter\"")) { //&& (textKotlin.contains("METHOD_START") || textKotlin.contains("METHOD_END") || textKotlin.contains(function.getName()))
-                                                    kotlinExpressionsToDelete.add(ktExpression);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                        }
-
-
-                    }
-                } else {
-                    System.out.println("[GreenMeter -> DeleteLogs -> actionPerformed$ Fatal Error: unknown file type: " + virtualFile.getName().trim());
-                }
+                });
             }
         }
 
