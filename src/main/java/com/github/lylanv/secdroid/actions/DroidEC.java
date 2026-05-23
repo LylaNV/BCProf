@@ -115,32 +115,6 @@ public class DroidEC extends AnAction {
             return;
         }
 
-//        psiFile.accept(new PsiRecursiveElementWalkingVisitor() {
-//            @Override
-//            public void visitElement(PsiElement element) {
-//                super.visitElement(element);
-//
-//                // Check if the element is a semicolon token
-//                if (element instanceof LeafPsiElement) {
-//                    LeafPsiElement leaf = (LeafPsiElement) element;
-//                    if (leaf.getElementType() == JavaTokenType.SEMICOLON) {
-//                        System.out.println("Found a semicolon: " + leaf.getText());
-//                    }
-//                }
-//            }
-//        });
-
-//        PsiElementVisitor visitor = new PsiElementVisitor() {
-//            @Override
-//            public void visitElement(@NotNull PsiElement element){
-//                if (element.getNode().getElementType() == JavaTokenType.SEMICOLON){
-//                    System.out.println("[GreenMeter -> logFindViewById$ HURRRRAAAAA I FOUND A ;");
-//                }
-//            }
-//        };
-//        psiFile.accept(visitor);
-
-
         //Gets the document
         Document document = (Document) PsiDocumentManager.getInstance(project).getDocument(psiFile);
         if (document == null) {
@@ -330,19 +304,12 @@ public class DroidEC extends AnAction {
         }
     }
 
-
     // This method converts VirtualFiles to psiClass (Java classes)
     private static PsiClass[] convertVirtualFileToPsiClass(Project project, VirtualFile virtualFile) {
         if (virtualFile == null) {
             System.out.println("[GreenMeter -> actionPerformed -> convertVirtualFileToPsiClass$ Fatal error: VirtualFile is null");
             return null;
         }
-
-        //We considered only java and kotlin files, so we do not need this
-//        if (!virtualFile.getName().endsWith(".java")) {
-//            System.out.println("[GreenMeter -> actionPerformed -> convertVirtualFileToPsiClass$ Fatal error: VirtualFile is not Java file type");
-//            return null;
-//        }
 
         PsiManager psiManager = PsiManager.getInstance(project);
         PsiFile psiFile = psiManager.findFile(virtualFile);
@@ -376,6 +343,7 @@ public class DroidEC extends AnAction {
             return null;
         }
     }
+
 
     // This method converts VirtualFiles to psiClass (Kotlin classes)
     private static List<KtClass> convertVirtualFileToKotlinClass(Project project, VirtualFile virtualFile) {
@@ -413,234 +381,415 @@ public class DroidEC extends AnAction {
         return kotlinClasses;
     }
 
+    //-----------------------------------------------------------------------------
     private void logMethodsStart(PsiClass[] psiClasses, VirtualFile virtualFile) {
-
-        //Extracts the class from the classes array
         for (PsiClass psiClass : psiClasses) {
             String className = psiClass.getName();
-            System.out.println("[GreenMeter -> actionPerformed -> logMethodsStart$ The class name is " + className);
-
-            //Get all the methods in the class
             psiMethods = psiClass.getMethods();
+            if (psiMethods == null) continue;
 
-            if (psiMethods != null) {
-                for (PsiMethod psiMethod : psiMethods) {
-                    String methodName = psiMethod.getName();
-                    System.out.println("[GreenMeter -> actionPerformed -> logMethodsStart$ The method name is " + methodName);
+            for (PsiMethod psiMethod : psiMethods) {
+                String methodName = psiMethod.getName();
+                PsiCodeBlock methodBody = psiMethod.getBody();
+                if (methodBody == null) continue;
 
-                    //Get method body
-                    PsiCodeBlock methodBody = psiMethod.getBody();
+                retrieveAPICallsInMethod(className, methodName, methodBody);
 
-                    if (methodBody == null) {
-                        System.out.println("[GreenMeter -> actionPerformed -> logMethodsStart$ The " + methodName + " method is empty so it will not consume energy!");
-                    }else {
-
-                        //Extract Android API calls from the method body
-                        retrieveAPICallsInMethod(className, methodName, methodBody);
-
-                        //Generate the method start log statement
-                        String startLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodName + "," + className + "," + MethodStart_TAG + ")\");";
-                        PsiStatement startLogStatementElement = factory.createStatementFromText(startLogStatement,psiMethod);
-
-//                        //Add the method start log statement
-//                        WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {methodBody.addBefore(startLogStatementElement, methodBody.getFirstBodyElement());});
-
-                        PsiStatement[] statements = methodBody.getStatements();
-
-                        //Add the method start log statement
-                        WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {
-
-                            //Check if method is constructor and the first statement is super or this, add the log statement after them because they must be first statement
-                            if(psiMethod.isConstructor()&&statements.length>0) {
-                                PsiStatement firstStatement = statements[0];
-                                String firstStatementText = firstStatement.getText();
-
-                                if (firstStatementText.startsWith("super(") || firstStatementText.startsWith("this(")) {
-                                    methodBody.addAfter(startLogStatementElement, firstStatement);
-                                    return;
-                                }
-                            }
-                            // Add as a first statement in the method
-                            methodBody.addBefore(startLogStatementElement, methodBody.getFirstBodyElement());});
-
-
-//                        PsiStatement[] statements = methodBody.getStatements();
-                        // Check if the code block has at least one statement
-                        if(statements.length > 0) {
-                            PsiStatement lastStatement = statements[statements.length - 1]; // Get the last statement
-
-                            // Check if the last statement is a method call to finish()
-                            if (lastStatement instanceof PsiExpressionStatement) {
-                                PsiExpression expression = ((PsiExpressionStatement) lastStatement).getExpression();
-                                if (expression instanceof PsiMethodCallExpression) {
-                                    PsiMethodCallExpression methodCall = (PsiMethodCallExpression) expression;
-                                    PsiReferenceExpression methodExpression = methodCall.getMethodExpression();
-                                    String lastMethodName = methodExpression.getReferenceName();
-
-                                    //if (!"finish".equals(lastMethodName) && !"startActivityForResult".equals(lastMethodName)) {
-                                    if (!"finish".equals(lastMethodName)) {
-
-                                        generateMethodEndLogAndAdd(methodName, className, psiMethod, methodBody);
-
-                                    } else {
-
-                                        //Generate the method end log statement
-                                        String endLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodName + "," + className + "," + MethodEnd_TAG + ")\");";
-                                        PsiStatement endLogStatementElement = factory.createStatementFromText(endLogStatement, psiMethod);
-
-                                        // Insert the log statement before the finish() call
-                                        WriteCommandAction.runWriteCommandAction(project, () -> {
-                                            methodBody.addBefore(endLogStatementElement, lastStatement);
-                                        });
-                                    }
-                                }
-                            }else if (lastStatement instanceof PsiReturnStatement){
-                                //Generate the method end log statement
-                                String endLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodName + "," + className + "," + MethodEnd_TAG + ")\");";
-                                PsiStatement endLogStatementElement = factory.createStatementFromText(endLogStatement, psiMethod);
-
-                                // Insert the log statement before the finish() call
-                                WriteCommandAction.runWriteCommandAction(project, () -> {
-                                    methodBody.addBefore(endLogStatementElement, lastStatement);
-                                });
-                            }else {
-                                generateMethodEndLogAndAdd(methodName, className, psiMethod, methodBody);
-                            }
-                        }else {
-                            generateMethodEndLogAndAdd(methodName, className, psiMethod, methodBody);
-
+                // Add START log
+                String startLog = "Log.d(\"" + Logging_TAG + "\", \"(" + methodName + "," + className + "," + MethodStart_TAG + ")\");";
+                PsiStatement startLogElement = factory.createStatementFromText(startLog, psiMethod);
+                WriteCommandAction.runWriteCommandAction(project, () -> {
+                    PsiStatement[] statements = methodBody.getStatements();
+                    if (psiMethod.isConstructor() && statements.length > 0) {
+                        String text = statements[0].getText();
+                        if (text.startsWith("super(") || text.startsWith("this(")) {
+                            methodBody.addAfter(startLogElement, statements[0]);
+                            return;
                         }
-
                     }
+                    methodBody.addBefore(startLogElement, methodBody.getFirstBodyElement());
+                });
+
+                // Track returns and check if the very last top-level statement blocks the end brace
+                List<PsiReturnStatement> returnStatements = new ArrayList<>();
+                List<PsiStatement> exitStatements = new ArrayList<>();
+                boolean endsWithUnconditionalExit = false;
+
+                PsiStatement[] finalStatements = methodBody.getStatements();
+                if (finalStatements.length > 0) {
+                    PsiStatement lastTopLevelStatement = finalStatements[finalStatements.length - 1];
+                    endsWithUnconditionalExit = isStatementTerminal(lastTopLevelStatement);
                 }
-            }else {
-                System.out.println("[GreenMeter -> actionPerformed -> logMethodsStart$ The class named " + className + " is empty and does not have any methods!");
+
+                // Find all exits (returns and throw exceptions) (including deeply nested ones) to inject END logs before them
+                methodBody.accept(new JavaRecursiveElementWalkingVisitor() {
+                    @Override
+                    public void visitReturnStatement(@NotNull PsiReturnStatement statement) {
+                        super.visitReturnStatement(statement);
+                        returnStatements.add(statement);
+                        exitStatements.add(statement);
+                    }
+
+                    @Override
+                    public void visitThrowStatement(@NotNull PsiThrowStatement statement) {
+                        super.visitThrowStatement(statement);
+                        exitStatements.add(statement);
+                    }
+                });
+
+                // Insert END logs before all found returns
+                // for (PsiReturnStatement returnStmt : returnStatements) {
+                for (PsiStatement exitStmt : exitStatements) {
+                    String endLog = "Log.d(\"" + Logging_TAG + "\", \"(" + methodName + "," + className + "," + MethodEnd_TAG + ")\");";
+
+                    WriteCommandAction.runWriteCommandAction(project, () -> {
+                        PsiElement exitParent = exitStmt.getParent();
+
+                        // 1. Check if the exit sits directly inside a braceless If Statement
+                        if (exitParent instanceof PsiIfStatement) {
+                            PsiIfStatement ifStmt = (PsiIfStatement) exitParent;
+                            String wrappedBlockText = "{\n" + endLog + "\n" + exitStmt.getText() + "\n}";
+                            PsiCodeBlock newBlock = JavaPsiFacade.getElementFactory(project)
+                                    .createCodeBlockFromText(wrappedBlockText, exitStmt);
+
+                            // Explicitly determine which branch child to re-route safely
+                            if (ifStmt.getThenBranch() == exitStmt) {
+                                ifStmt.getThenBranch().replace(newBlock);
+                            } else if (ifStmt.getElseBranch() == exitStmt) {
+                                ifStmt.getElseBranch().replace(newBlock);
+                            }
+                        }
+                        // 2. Check if the exit sits directly inside a braceless Loop Statement
+                        else if (exitParent instanceof PsiLoopStatement) {
+                            PsiLoopStatement loopStmt = (PsiLoopStatement) exitParent;
+                            String wrappedBlockText = "{\n" + endLog + "\n" + exitStmt.getText() + "\n}";
+                            PsiCodeBlock newBlock = JavaPsiFacade.getElementFactory(project)
+                                    .createCodeBlockFromText(wrappedBlockText, exitStmt);
+
+                            if (loopStmt.getBody() == exitStmt) {
+                                loopStmt.getBody().replace(newBlock);
+                            }
+                        }
+                        // 3. Standard safe block scenario (already has curly braces)
+                        else {
+                            PsiStatement endLogElement = factory.createStatementFromText(endLog, psiMethod);
+                            exitParent.addBefore(endLogElement, exitStmt);
+                        }
+                    });
+                }
+
+                // ONLY add a log at the very end of the method if it doesn't structurally end with a return/throw
+                if (!endsWithUnconditionalExit) {
+                    generateMethodEndLogAndAdd(methodName, className, psiMethod, methodBody);
+                }
             }
         }
     }
 
 
-    private void logFunctionsStart(List<KtClass> kotlinClasses, VirtualFile virtualFile) {
+    private boolean checkIfStatementExitsDefinitively(PsiIfStatement ifStatement) {
+        PsiStatement thenBranch = ifStatement.getThenBranch();
+        PsiStatement elseBranch = ifStatement.getElseBranch();
 
-        //Extracts the class from the classes list
+        // If there is no 'else' branch, execution can always skip the 'if' block and reach the bottom brace
+        if (thenBranch == null || elseBranch == null) {
+            return false;
+        }
+
+        return isStatementTerminal(thenBranch) && isStatementTerminal(elseBranch);
+    }
+
+
+    private boolean isStatementTerminal(PsiStatement statement) {
+        if (statement == null) return false;
+
+        // If the branch statement is wrapped in braces { ... }, look at its final internal statement
+        if (statement instanceof PsiBlockStatement) {
+            return isBlockTerminal(((PsiBlockStatement) statement).getCodeBlock());
+        }
+
+        // 1. Direct Return or Throw statements
+        if (statement instanceof PsiReturnStatement || statement instanceof PsiThrowStatement) {
+            return true;
+        }
+        // 2. If statements (must terminate cleanly in BOTH the then and else branches)
+        else if (statement instanceof PsiIfStatement) {
+            return checkIfStatementExitsDefinitively((PsiIfStatement) statement);
+        }
+        // 3. Try-Catch statements (terminal if both try and all catches terminate)
+        else if (statement instanceof PsiTryStatement) {
+            PsiTryStatement tryStmt = (PsiTryStatement) statement;
+
+            // Check the try block body
+            PsiCodeBlock tryBlock = tryStmt.getTryBlock();
+            if (tryBlock == null || !isBlockTerminal(tryBlock)) {
+                return false;
+            }
+
+            // Check every catch block body
+            PsiCatchSection[] catchSections = tryStmt.getCatchSections();
+            for (PsiCatchSection catchSection : catchSections) {
+                PsiCodeBlock catchBlock = catchSection.getCatchBlock();
+                if (catchBlock == null || !isBlockTerminal(catchBlock)) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        // 4. Switch statement check
+        else if (statement instanceof PsiSwitchStatement) {
+            PsiSwitchStatement switchStmt = (PsiSwitchStatement) statement;
+            PsiCodeBlock switchBody = switchStmt.getBody();
+            if (switchBody == null) return false;
+
+            PsiStatement[] statements = switchBody.getStatements();
+            boolean hasDefault = false;
+
+            // We need to inspect every block section inside the switch
+            for (int i = 0; i < statements.length; i++) {
+                if (statements[i] instanceof PsiSwitchLabelStatement) {
+                    PsiSwitchLabelStatement label = (PsiSwitchLabelStatement) statements[i];
+                    if (label.isDefaultCase()) {
+                        hasDefault = true;
+                    }
+
+                    // Look ahead to find if this case block branch terminates
+                    boolean branchTerminates = false;
+                    for (int j = i + 1; j < statements.length; j++) {
+                        // If we hit the next label or the end of the switch, check the statement right before it
+                        if (statements[j] instanceof PsiSwitchLabelStatement) {
+                            if (j > i + 1) {
+                                branchTerminates = isStatementTerminal(statements[j - 1]);
+                            }
+                            break;
+                        }
+                        // If we hit the absolute end of the switch block statement array
+                        if (j == statements.length - 1) {
+                            branchTerminates = isStatementTerminal(statements[j]);
+                        }
+                    }
+
+                    // If any branch doesn't return or throw (or uses a break statement), execution can escape
+                    if (!branchTerminates) {
+                        return false;
+                    }
+                }
+            }
+
+            // A switch is only fully terminal if it covers all bases with a default case
+            return hasDefault;
+        }
+
+        return false;
+    }
+
+
+    // Helper to read code blocks safely
+    private boolean isBlockTerminal(PsiCodeBlock block) {
+        if (block == null) return false;
+        PsiStatement[] statements = block.getStatements();
+        if (statements.length == 0) return false;
+        // Inspect the absolute final item in the code block sequence
+        return isStatementTerminal(statements[statements.length - 1]);
+    }
+    //-----------------------------------------------------------------------------
+
+    //-----------------------------------------------------------------------------
+    private void logFunctionsStart(List<KtClass> kotlinClasses, VirtualFile virtualFile) {
         for (KtClass kotlinClass : kotlinClasses) {
             String className = kotlinClass.getName();
-            System.out.println("[GreenMeter -> actionPerformed -> logFunctionsStart$ The class name is " + className);
-
-            // functions: Holds all the functions inside the input kotlin file and a specific class in that
             List<KtNamedFunction> functions = new ArrayList<>();
-            // Get all declarations in the class
+
             for (KtDeclaration declaration : kotlinClass.getDeclarations()) {
-                // Filter for functions
                 if (declaration instanceof KtNamedFunction) {
                     functions.add((KtNamedFunction) declaration);
                 }
             }
 
-            if (functions.size() > 0) {
-                for (KtNamedFunction function : functions) {
-                    String functionName = function.getName();
-                    System.out.println("[GreenMeter -> actionPerformed -> logFunctionsStart$ The function name is " + functionName);
+            for (KtNamedFunction function : functions) {
+                String functionName = function.getName();
+                KtExpression functionBody = function.getBodyExpression();
+                if (functionBody == null) continue;
 
-                    KtExpression functionBody = function.getBodyExpression();
-                    //KtBlockExpression functionBody = function.getBodyBlockExpression();
+                retrieveAPICallsInKotlinFunction(className, functionName, functionBody);
 
-                    if (functionBody == null) {
-                        System.out.println("[GreenMeter -> actionPerformed -> logFunctionsStart$ The class named " + className + " is empty and does not have any methods!");
-                    }else {
-                        //Extract Android API calls from the method body
-                        retrieveAPICallsInKotlinFunction(className, functionName, functionBody);
+                // Add START log
+                String startLog = "Log.d(\"" + Logging_TAG + "\", \"(" + functionName + "," + className + "," + MethodStart_TAG + ")\")";
+                KtExpression startLogElement = factoryKotlin.createExpression(startLog);
+                WriteCommandAction.runWriteCommandAction(project, () -> {
+                    PsiElement firstContent = functionBody.getFirstChild();
+                    if (firstContent != null) {
+                        functionBody.addAfter(startLogElement, functionBody.getFirstChild());
+                    } else {
+                        functionBody.add(startLogElement);
+                    }
+                });
 
-                        //Generate the method start log statement
-                        String startLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + functionName + "," + className + "," + MethodStart_TAG + ")\")";
-                        KtExpression expression = factoryKotlin.createExpression(startLogStatement);
-                        //KtStatementExpression expression = (KtStatementExpression) factoryKotlin.createExpression(startLogStatement);
+                // Check if the closing block area is dead code
+                boolean endsWithUnconditionalExit = false;
+                KtBlockExpression functionBodyBlock = function.getBodyBlockExpression();
 
-                        //Add the method start log statement
-                        WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {
-                            PsiElement firstContent = functionBody.getFirstChild();
-
-                            if (firstContent != null) {
-                                functionBody.addAfter(expression,functionBody.getFirstChild());
-                            }else {
-                                functionBody.add(expression);
-                            }
-                        });
-
-                        KtBlockExpression functionBodyBlock = function.getBodyBlockExpression();
-                        List<KtExpression> ktExpressions = functionBodyBlock.getStatements();
-
-                        // Check if the code block has at least one statement
-                        if(ktExpressions.size() > 0) {
-                            KtExpression lastStatement = ktExpressions.getLast(); // Get the last statement
-
-                            // Check if the last statement is a function call to finish()
-                            if (lastStatement instanceof KtCallExpression) {
-
-                                KtCallExpression lastFunctionCall = (KtCallExpression) lastStatement;
-
-                                // Get the method name
-                                KtExpression calleeExpression = lastFunctionCall.getCalleeExpression();
-                                String lastFunctionCallName = (calleeExpression != null) ? calleeExpression.getText() : null;
-
-                                if (!"finish".equals(lastFunctionCallName)) { // if the last statement is a function call but not a finish()
-
-                                    generateFunctionEndLogAndAdd(functionName, className, function);
-
-                                } else { // if the last statement is finish()
-
-                                    //Generate the method end log statement
-                                    String endLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + functionName + "," + className + "," + MethodEnd_TAG + ")\")";
-                                    KtExpression endLogStatementElement = factoryKotlin.createExpression(endLogStatement);
-
-                                    // Insert the log statement before the finish() call
-                                    WriteCommandAction.runWriteCommandAction(project, () -> {
-
-                                        // Insert the end log statement after the newline
-                                        functionBody.addBefore(endLogStatementElement, lastStatement);
-
-                                        // Create a newline (white space) element
-                                        PsiElement newLine = factoryKotlin.createNewLine();
-
-                                        // Insert the newline before the last statement
-                                        functionBody.addBefore(newLine, lastStatement);
-
-                                    });
-                                }
-
-                            }else if (lastStatement instanceof KtReturnExpression){ // if the last statement is return
-                                //Generate the method end log statement
-                                String endLogStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + functionName + "," + className + "," + MethodEnd_TAG + ")\")";
-                                KtExpression endLogStatementElement = factoryKotlin.createExpression(endLogStatement);
-
-                                // Insert the log statement before the finish() call
-                                WriteCommandAction.runWriteCommandAction(project, () -> {
-
-                                    // Insert the end log statement after the newline
-                                    functionBody.addBefore(endLogStatementElement, lastStatement);
-
-                                    // Create a newline (white space) element
-                                    PsiElement newLine = factoryKotlin.createNewLine();
-
-                                    // Insert the newline before the last statement
-                                    functionBody.addBefore(newLine, lastStatement);
-
-                                });
-                            }else { // all other type of expressions -> add the statement
-                                generateFunctionEndLogAndAdd(functionName, className, function);
-                            }
-
-                        }else { // function body is empty -> add the statement
-                            generateFunctionEndLogAndAdd(functionName, className, function);
-
-                        }
+                if (functionBodyBlock != null) {
+                    List<KtExpression> ktExpressions = functionBodyBlock.getStatements();
+                    if (!ktExpressions.isEmpty()) {
+                        KtExpression lastTopLevelExpression = ktExpressions.get(ktExpressions.size() - 1);
+                        endsWithUnconditionalExit = isKotlinExpressionTerminal(lastTopLevelExpression);
                     }
                 }
-            } else {
-                System.out.println("[GreenMeter -> actionPerformed -> logFunctionsStart$ There is not any functions in the class " + className + "!");
+
+                // Gather all exits (return and trow exception) expressions via visitor
+                List<KtExpression> exitExpressions = new ArrayList<>();
+                functionBody.accept(new KtTreeVisitorVoid() {
+                    @Override
+                    public void visitReturnExpression(@NotNull KtReturnExpression expression) {
+                        super.visitReturnExpression(expression);
+                        exitExpressions.add(expression);
+                    }
+
+                    @Override
+                    public void visitThrowExpression(@NotNull KtThrowExpression expression) {
+                        super.visitThrowExpression(expression);
+                        exitExpressions.add(expression);
+                    }
+                });
+
+                // Insert END logs before all returns
+                for (KtExpression exitExpr : exitExpressions) {
+                    String endLog = "Log.d(\"" + Logging_TAG + "\", \"(" + functionName + "," + className + "," + MethodEnd_TAG + ")\")";
+
+                    WriteCommandAction.runWriteCommandAction(project, () -> {
+                        PsiElement exitParent = exitExpr.getParent();
+
+                        // 1. Check if the exit sits directly inside a braceless Kotlin If Expression
+                        if (exitParent instanceof KtIfExpression) {
+                            KtIfExpression ifExpr = (KtIfExpression) exitParent;
+                            String wrappedKotlinBlock = "{\n" + endLog + "\n" + exitExpr.getText() + "\n}";
+                            KtExpression newKotlinBlock = factoryKotlin.createBlock(wrappedKotlinBlock);
+
+                            if (ifExpr.getThen() == exitExpr) {
+                                ifExpr.getThen().replace(newKotlinBlock);
+                            } else if (ifExpr.getElse() == exitExpr) {
+                                ifExpr.getElse().replace(newKotlinBlock);
+                            }
+                        }
+                        // 2. Check if the exit sits inside a braceless Kotlin Loop or Container Node
+                        else if (exitParent instanceof KtContainerNode || exitParent instanceof KtLoopExpression) {
+                            String wrappedKotlinBlock = "{\n" + endLog + "\n" + exitExpr.getText() + "\n}";
+                            KtExpression newKotlinBlock = factoryKotlin.createBlock(wrappedKotlinBlock);
+                            exitExpr.replace(newKotlinBlock);
+                        }
+                        // 3. Standard safe block scenario (already has curly braces)
+                        else {
+                            KtExpression endLogElement = factoryKotlin.createExpression(endLog);
+                            exitParent.addBefore(endLogElement, exitExpr);
+                            exitParent.addBefore(factoryKotlin.createNewLine(), exitExpr);
+                        }
+                    });
+                }
+
+                // ONLY add to the trailing block body if the last expression isn't natively terminating the flow
+                if (functionBodyBlock != null && !endsWithUnconditionalExit) {
+                    generateFunctionEndLogAndAdd(functionName, className, function);
+                }
             }
         }
     }
+
+
+    private boolean checkKotlinIfExitsDefinitively(KtIfExpression ifExpression) {
+        KtExpression thenBranch = ifExpression.getThen();
+        KtExpression elseBranch = ifExpression.getElse();
+
+        if (thenBranch == null || elseBranch == null) {
+            return false;
+        }
+
+        return isKotlinExpressionTerminal(thenBranch) && isKotlinExpressionTerminal(elseBranch);
+    }
+
+
+    private boolean isKotlinExpressionTerminal(KtExpression expression) {
+        if (expression == null) return false;
+
+        // If the expression is an entire block { ... }, evaluate its final statement
+        if (expression instanceof KtBlockExpression) {
+            List<KtExpression> innerExpressions = ((KtBlockExpression) expression).getStatements();
+            if (innerExpressions.isEmpty()) return false;
+            expression = innerExpressions.get(innerExpressions.size() - 1);
+        }
+
+        // 1. Unconditional Local Exits
+        if (expression instanceof KtReturnExpression || expression instanceof KtThrowExpression) {
+            return true;
+        }
+
+        // 2. Conditional Branch Exits (Both branches must terminate)
+        else if (expression instanceof KtIfExpression) {
+            return checkKotlinIfExitsDefinitively((KtIfExpression) expression);
+        }
+
+        // 3. Try-Catch Expression Check
+        else if (expression instanceof KtTryExpression) {
+            KtTryExpression tryExpr = (KtTryExpression) expression;
+
+            // A try expression is terminal only if its main block terminates...
+            KtBlockExpression tryBlock = tryExpr.getTryBlock();
+            if (tryBlock == null || !isKotlinBlockTerminal(tryBlock)) {
+                return false;
+            }
+
+            // ...and EVERY SINGLE associated catch block also terminates.
+            List<KtCatchClause> catchClauses = tryExpr.getCatchClauses();
+            for (KtCatchClause clause : catchClauses) {
+                KtExpression catchBody = clause.getCatchBody();
+                if (catchBody == null || !isKotlinExpressionTerminal(catchBody)) {
+                    return false;
+                }
+            }
+
+            return true; // No bypass path exists out of this try-catch block
+        }
+        else if (expression instanceof KtWhenExpression) {
+            KtWhenExpression whenExpr = (KtWhenExpression) expression;
+
+            // Natively determine if an 'else' branch is present in the when expression
+            boolean hasElseBranch = false;
+            for (KtWhenEntry entry : whenExpr.getEntries()) {
+                if (entry.isElse()) {
+                    hasElseBranch = true;
+                    break;
+                }
+            }
+
+            // A 'when' block in Kotlin MUST have an explicit 'else' branch to be fully terminal
+            if (!hasElseBranch) {
+                return false;
+            }
+
+            // Loop through every single branch entry; all of them must terminate natively
+            for (KtWhenEntry entry : whenExpr.getEntries()) {
+                KtExpression entryExpression = entry.getExpression();
+                if (entryExpression == null || !isKotlinExpressionTerminal(entryExpression)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        return false;
+    }
+
+
+    // Helper to safely scan trailing elements in an explicit block node
+    private boolean isKotlinBlockTerminal(KtBlockExpression block) {
+        if (block == null) return false;
+        List<KtExpression> expressions = block.getStatements();
+        if (expressions.isEmpty()) return false;
+        return isKotlinExpressionTerminal(expressions.get(expressions.size() - 1));
+    }
+    //-----------------------------------------------------------------------------
 
 
     private void generateMethodEndLogAndAdd(String methodName, String className, PsiMethod psiMethod, PsiCodeBlock methodBody) {
@@ -649,7 +798,6 @@ public class DroidEC extends AnAction {
         PsiStatement endLogStatementElement = factory.createStatementFromText(endLogStatement, psiMethod);
 
         //CodeStyleManager codeStyleManager = CodeStyleManager.getInstance(project);
-
 
         //Add the method end log statement
         WriteCommandAction.runWriteCommandAction(project, () -> {
@@ -723,6 +871,7 @@ public class DroidEC extends AnAction {
         }
     }
 
+
     // Extract API calls and count them within the input method body
     public void retrieveAPICallsInMethod(String methodClassName, String inputMethodName, PsiCodeBlock methodBody) {
         List<PsiMethodCallExpression> methodCalls = new ArrayList<>();
@@ -794,18 +943,6 @@ public class DroidEC extends AnAction {
     }
 
 
-//    public void copyMethodInfo(){
-//        // Copy the methodsAPICallsCountLocalMap to a Map in the singleton, so all the classes can access it
-//        if (!methodsAPICallsCountLocalMap.isEmpty()) {
-//            singleton.fillMethodsAPICallsCountMap(methodsAPICallsCountLocalMap);
-//        }
-//
-//        if (!methodsAPICallsTotalEnergyCostLocalMap.isEmpty()) {
-//            singleton.fillMethodsAPICallsEnergyMap(methodsAPICallsTotalEnergyCostLocalMap);
-//        }
-//    }
-
-
     private void updateMethodsEnergyMaps(String methodName, String methodClassName, String inputMethodName) {
 
         if (methodsAPICallsCountLocalMap.isEmpty()){ // If this is true, it means that this is the first item we are putting in the Map, so easily add
@@ -837,71 +974,6 @@ public class DroidEC extends AnAction {
 
     }
 
-//    // This method annotates methods - WORKING
-//    private void retrieveClasses(PsiClass[] psiClasses) {
-//        for (PsiClass psiClass : psiClasses) {
-//            annotateMethods(psiClass);
-//        }
-//    }
-//
-//    // This method annotates methods - WORKING
-//    private void annotateMethods(PsiClass psiClass) {
-//
-//        psiMethods = psiClass.getMethods();
-//        for (PsiMethod psiMethod : psiMethods) {
-//            System.out.println("[GreenMeter -> actionPerformed -> annotateClasses -> annotateMethods$ psiMethod is " + psiMethod);
-//            //factory = JavaPsiFacade.getElementFactory(psiMethod.getProject());
-//            annotation = factory.createAnnotationFromText("@StartOfMethod", psiMethod);
-//            //annotation = factory.createAnnotationFromText("@com.github.lylanv.greenedge.inspections.StartOfMethod", psiMethod);
-//
-//            new WriteCommandAction.Simple(project, psiMethod.getContainingFile()) {
-//                @Override
-//                protected void run() throws Throwable {
-//                    PsiModifierList modifierList = psiMethod.getModifierList();
-//                    PsiElement firstChild = modifierList.getFirstChild();
-//
-//                    if (modifierList != null) {
-//
-//                        // Gets the methods annotations list
-//                        PsiAnnotation[] annotations = modifierList.getAnnotations();
-//
-//                        // The following "if" will be executed if the method has annotations
-//                        if (annotations.length > 0) {
-//                            // Find the first child of modifierList that is not an annotation
-//                            PsiElement insertionPoint = null;
-//                            PsiElement[] children = modifierList.getChildren();
-//                            for (PsiElement child : children) {
-//                                //TODO: check if this part of the code can also detects Android specific annotations as well
-//                                if (!(child instanceof PsiAnnotation)) {
-//                                    insertionPoint = child;
-//                                    break;
-//                                }
-//                            }
-//                            if (insertionPoint != null) {
-//                                // Add the annotation before the insertion point
-//                                PsiElement finalInsertionPoint = insertionPoint;
-//                                WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {modifierList.addBefore(annotation, finalInsertionPoint);});
-//                            } else {
-//                                // If all children are annotations, add the annotation at the end of the modifier list
-//                                WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {modifierList.add(annotation);});
-//                            }
-//                        } else {
-//                            if (firstChild instanceof PsiKeyword) {
-//                                // Add the annotation before the "public" modifier
-//                                WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {modifierList.addBefore(annotation, firstChild);});
-//                            } else {
-//                                // If there is no existing modifier, or it's not a PsiKeyword, simply add the annotation to the modifier list
-//                                WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {modifierList.add(annotation);});
-//                            }
-//                        }
-//                    } else {
-//                        WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {modifierList.add(annotation);});
-//                    }
-//                }
-//            }.execute();
-//        }
-//
-//    }
 
     // This method travers the input Java virtual file and finds method call
     // and filters specific API calls and adds the proper log statements
@@ -983,104 +1055,13 @@ public class DroidEC extends AnAction {
                         }
 
                     }
-
-                    /*
-                     *
-                     *
-                     *
-                     *
-                     * STOP
-                     * STOP
-                     * STOP
-                     *
-                     *
-                     *
-                     *
-                     * */
-//
-//                    if (singleton.jointRedAPICalls.keySet().contains(methodCallName)) {
-//                        String jointRedAPICallType = expression.getMethodExpression().getReference().getCanonicalText();
-//
-//                        if (singleton.jointRedAPIsParents.keySet().contains(jointRedAPICallType + "." + methodCallName)) {
-//                            addTimeStamp(expression,methodCallName,fileName);
-//                        }
-//                    }
-
-
-
-
-
-//                    switch (methodCallName) {
-//                        case "performClick":
-//                            System.out.println("[GreenMeter -> analyzeAndroidAPIs$ case is: " + methodCallName);
-//                            addLogStatement(expression,methodCallName, fileName);
-//                            break;
-//                        case "getIntExtra":
-//                            System.out.println("[GreenMeter -> analyzeAndroidAPIs$ case is: " + methodCallName);
-//                            addLogStatement(expression,methodCallName, fileName);
-//                            break;
-//                        case "i":
-//                            System.out.println("[GreenMeter -> analyzeAndroidAPIs$ case is: " + methodCallName);
-//                            addLogStatement(expression,methodCallName, fileName);
-//                            break;
-//                        case "finish":
-//                            System.out.println("[GreenMeter -> analyzeAndroidAPIs$ case is: " + methodCallName);
-//                            //TODO: add the log statement before finish().
-//                            addLogStatement(expression,methodCallName, fileName);
-//                            break;
-//                        case "cancelAll":
-//                            System.out.println("[GreenMeter -> analyzeAndroidAPIs$ case is: " + methodCallName);
-//                            addLogStatement(expression,methodCallName, fileName);
-//                            break;
-//                        case "startActivityForResult":
-//                            System.out.println("[GreenMeter -> analyzeAndroidAPIs$ case is: " + methodCallName);
-//                            addLogStatement(expression,methodCallName, fileName);
-//                            break;
-//                        case "findViewById":
-//                            System.out.println("[GreenMeter -> analyzeAndroidAPIs$ case is: " + methodCallName);
-//                            addLogStatement(expression,methodCallName, fileName);
-//                            break;
-//                        case "getPhoneType":
-//                            System.out.println("[GreenMeter -> analyzeAndroidAPIs$ case is: " + methodCallName);
-//                            addLogStatement(expression,methodCallName, fileName);
-//                            break;
-//                        case "clear":
-//                            System.out.println("[GreenMeter -> analyzeAndroidAPIs$ case is: " + methodCallName);
-//                            addLogStatement(expression,methodCallName, fileName);
-//                            break;
-//                        case "getPixel":
-//                            System.out.println("[GreenMeter -> analyzeAndroidAPIs$ case is: " + methodCallName);
-//                            addLogStatement(expression,methodCallName, fileName);
-//                            break;
-//                        default:
-//                            System.out.println("[GreenMeter -> analyzeAndroidAPIs$ case is default");
-//
-////                                case :
-////                                case :
-////                                case :
-////                                case :
-////                                case :
-////                                case :
-////                                case :
-////                                case :
-////                                case :
-////                                case :
-////                                case :
-//                    }
-
-
-//                    CommandProcessor.getInstance().executeCommand(project, (Runnable) () -> {
-//                        CodeStyleManager codeStyleManager = CodeStyleManager.getInstance(project);
-//                        codeStyleManager.reformat(psiFile);
-//                    },"Reformat Code",null);
-
-
                 }
             });
         }else {
             System.out.println("[GreenMeter -> annotateMethods$ There is not equivalent PSI file for input virtual file.");
         }
     }
+
 
     // This method travers the input Kotlin virtual file and finds method call
     // and filters specific API calls and adds the proper log statements
@@ -1158,6 +1139,7 @@ public class DroidEC extends AnAction {
         }
     }
 
+
     //This method creates and adds the log statements to the source code of the application
     private void addLogStatement(PsiMethodCallExpression expression, String methodCallName, String javaFile) {
 
@@ -1172,160 +1154,287 @@ public class DroidEC extends AnAction {
         if (parent != null) {
             if (!methodCallName.equals("finish") && !methodCallName.equals("startActivityForResult")) {
 
-                int lineNumber; // Holds the exact line number of the API call
-                if (importLogStatementAvailable){
-                    lineNumber = getLineNumber(parent) + 1;
-                }else {
-                    lineNumber = getLineNumber(parent) + 3;
+                // Holds the exact line number of the API call
+                int lineNumber = importLogStatementAvailable ? getLineNumber(parent) + 1 : getLineNumber(parent) + 3;
+
+                String logStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodCallName + "," + javaFile + "," + lineNumber + ")\");";
+                PsiStatement logStatementElement = factory.createStatementFromText(logStatement, expression.getContext());
+
+                // =========================================================================
+                // 1. CONDITIONAL EVALUATION CLAUSE TRAP (e.g., if (!delete(child)) { ... })
+                // =========================================================================
+                PsiIfStatement parentIfCondition = PsiTreeUtil.getParentOfType(expression, PsiIfStatement.class);
+                if (parentIfCondition != null && !PsiTreeUtil.isAncestor(parentIfCondition.getThenBranch(), expression, true)
+                        && !PsiTreeUtil.isAncestor(parentIfCondition.getElseBranch(), expression, true)) {
+
+                    WriteCommandAction.runWriteCommandAction(project, () -> {
+                        parentIfCondition.getParent().addBefore(logStatementElement, parentIfCondition);
+                    });
+                    return; // Complete handling early!
                 }
 
-                //String logStatement = "Log.d(\"" + Logging_TAG + "\", \"" + methodCallName + ", File: " + javaFile + ", Line number is " + lineNumber + "\");";
-                String logStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodCallName + "," + javaFile + "," + lineNumber + ")\");";
-                PsiStatement logStatementElement = factory.createStatementFromText(logStatement,expression.getContext());
+                // =========================================================================
+                // 2. LAMBDA EXPRESSION TRAP (e.g., pref -> editText.getText())
+                // =========================================================================
+                PsiLambdaExpression nestedLambda = PsiTreeUtil.getParentOfType(expression, PsiLambdaExpression.class);
+                if (nestedLambda != null) {
+                    PsiStatement outerStatement = PsiTreeUtil.getParentOfType(nestedLambda, PsiStatement.class);
+                    if (outerStatement != null) {
+                        WriteCommandAction.runWriteCommandAction(project, () -> {
+                            outerStatement.getParent().addBefore(logStatementElement, outerStatement);
+                        });
+                        return; // Complete handling early!
+                    }
+                }
 
-                //The semicolon should be in one of the leaf nodes
+                // =========================================================================
+                // 3. RETURN STATEMENT TRAP WITH SCOPE PROTECTION (e.g., return apiCall();)
+                // =========================================================================
+                PsiReturnStatement enclosingReturn = PsiTreeUtil.getParentOfType(expression, PsiReturnStatement.class);
+                // SCOPE VALIDATION: Only act if the API call is actually a child of this return statement,
+                // and not an independent return statement sitting higher up in a lambda block!
+                if (enclosingReturn != null && PsiTreeUtil.isAncestor(enclosingReturn, parent, false)) {
+                    WriteCommandAction.runWriteCommandAction(project, () -> {
+                        PsiElement returnParent = enclosingReturn.getParent();
+
+                        // Check if the return statement lives naked inside an unbraced block statement
+                        if (returnParent instanceof PsiIfStatement || returnParent instanceof PsiLoopStatement) {
+                            String wrappedBlockText = "{\n" + logStatement + "\n" + enclosingReturn.getText() + "\n}";
+                            PsiCodeBlock newBlock = JavaPsiFacade.getElementFactory(project).createCodeBlockFromText(wrappedBlockText, enclosingReturn);
+                            enclosingReturn.replace(newBlock);
+                        } else {
+                            // Standard block scenario (already has braces)
+                            returnParent.addBefore(logStatementElement, enclosingReturn);
+                        }
+                    });
+                    return; // Complete handling early!
+                }
+
+                // =========================================================================
+                // 4. LOOK AHEAD FOR NEXT ELEMENT EXIT TRAP (e.g., apiCall(); return;)
+                // =========================================================================
+                PsiElement nextStatement = PsiTreeUtil.skipWhitespacesAndCommentsForward(parent);
+                boolean followedByExit = false;
+
+                // SCOPE VALIDATION: Confirm the next statement is an exit AND shares the exact same block parent container
+                if (nextStatement instanceof PsiReturnStatement || nextStatement instanceof PsiThrowStatement) {
+                    if (nextStatement.getParent() == parent.getParent()) {
+                        followedByExit = true;
+                    }
+                }
+
+                if (followedByExit) {
+                    PsiElement finalNextStatement = nextStatement;
+                    PsiElement finalParent = parent;
+                    WriteCommandAction.runWriteCommandAction(project, () -> {
+                        PsiElement grandParent = finalParent.getParent();
+                        if (grandParent instanceof PsiIfStatement || grandParent instanceof PsiLoopStatement) {
+                            // Convert the entire sequence layout into a clean braced block to preserve logic bounds
+                            String wrappedBlockText = "{\n" + logStatement + "\n" + finalParent.getText() + "\n" + finalNextStatement.getText() + "\n}";
+                            PsiCodeBlock newBlock = JavaPsiFacade.getElementFactory(project).createCodeBlockFromText(wrappedBlockText, finalParent);
+
+                            finalNextStatement.delete();
+                            finalParent.replace(newBlock);
+                        } else {
+                            // Safe block sequence context
+                            grandParent.addBefore(logStatementElement, finalParent);
+                        }
+                    });
+                    return; // Complete handling early!
+                }
+
+                // =========================================================================
+                // 5. STANDARD INJECTION SEQUENCE PATH (Safe behind trailing semicolon)
+                // =========================================================================
                 PsiElement semicolon = PsiTreeUtil.nextLeaf(parent);
-
-                //Finds the semicolon which is in the end of the method call expression
                 while (semicolon != null && !(semicolon instanceof PsiJavaToken && ((PsiJavaToken) semicolon).getTokenType() == JavaTokenType.SEMICOLON)) {
-                    //semicolon = PsiTreeUtil.nextLeaf(semicolon);
                     semicolon = PsiTreeUtil.prevLeaf(semicolon);
                 }
 
-                //Creates an enter/white space element
-                PsiElement emptyLine = parserFacade.createWhiteSpaceFromText("\n");
+                if (semicolon != null) {
+                    PsiElement emptyLine = parserFacade.createWhiteSpaceFromText("\n");
+                    PsiElement finalInsertionPoint = semicolon.getParent();
+                    PsiElement finalSemicolon = semicolon;
 
-                //writes the statement and the white space to the right place in the Psi tree
-                PsiElement finalInsertionPoint = semicolon.getParent();
-                PsiElement finalSemicolon = semicolon;
-                CodeStyleManager codeStyleManager = CodeStyleManager.getInstance(project);
-                WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {finalInsertionPoint.addAfter(logStatementElement,finalSemicolon);});
-                //TODO: change adding white sapace manually. We should not do that beased on: https://plugins.jetbrains.com/docs/intellij/modifying-psi.html#whitespaces-and-imports
-                WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {finalInsertionPoint.addAfter(emptyLine, finalSemicolon);});
-//            WriteCommandAction.runWriteCommandAction(project,(Runnable) () -> {codeStyleManager.reformatNewlyAddedElement((ASTNode) logStatementElement.getParent().getNode(),logStatementElement.getNode());});
-//            WriteCommandAction.runWriteCommandAction(project,(Runnable) () -> {codeStyleManager.reformatNewlyAddedElement(psiFile.getNode(), finalInsertionPoint.getNode());});
-
-            }else {
-                //Log statement should be added before finish, startActivityForResult, and .... MAYBE FOUND IN THE FUTURE
-
-                int lineNumber; // Holds the exact line number of the API call
-                if (importLogStatementAvailable){
-                    lineNumber = getLineNumber(parent) + 2;
-                }else {
-                    lineNumber = getLineNumber(parent) + 4;
+                    WriteCommandAction.runWriteCommandAction(project, () -> {
+                        finalInsertionPoint.addAfter(logStatementElement, finalSemicolon);
+                        finalInsertionPoint.addAfter(emptyLine, finalSemicolon);
+                    });
                 }
 
-                String logStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodCallName + "," + javaFile + "," + lineNumber + ")\");";
-                PsiStatement logStatementElement = factory.createStatementFromText(logStatement,expression.getContext());
+            } else {
+                // Log statement should be added before finish, startActivityForResult, etc.
+                int lineNumber = importLogStatementAvailable ? getLineNumber(parent) + 2 : getLineNumber(parent) + 4;
 
+                String logStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + methodCallName + "," + javaFile + "," + lineNumber + ")\");";
+                PsiStatement logStatementElement = factory.createStatementFromText(logStatement, expression.getContext());
 
                 PsiElement target = parent.getParent();
                 PsiElement parentElement = parent;
-                WriteCommandAction.runWriteCommandAction(project, (Runnable) () -> {target.addBefore(logStatementElement,parentElement);});
-
+                WriteCommandAction.runWriteCommandAction(project, () -> {
+                    target.addBefore(logStatementElement, parentElement);
+                });
             }
-
-        }else{
+        } else {
             System.out.println("[GreenMeter -> logFindViewById$ Fatal error: Method call expression is null: There is not any method call!");
         }
-
     }
+
 
     //This method creates and adds the log statements to the source code of the application
     private void addLogStatementToKotlinFile(KtCallExpression expression, String functionCallName, String kotlinFile) {
 
         System.out.println("[GreenMeter -> addLogStatementToKotlinFile$ addLogStatementToKotlinFile method is called");
 
-        /*
-        * Traverse upwards if the parent is a KtDotQualifiedExpression to get the full expression
-        * Check if the call expression is part of a chain
-        * This block code is to get the full expression of the function call
-        * The reason that we used parentLookedUp variable is the requirement of
-        * a new line if the parent traversed more than one time
-        *  */
+        // 1. SAFE PARENT VISITOR RESOLUTION
+        // Safely determine the highest relevant expression parent layout within the immediate block
         PsiElement parent = expression.getParent();
-
         int parentLookedUp = 0;
         PsiElement previousParent = parent;
-        while (!(parent instanceof KtBlockExpression) || parent == null) {
+
+        while (parent != null && !(parent instanceof KtBlockExpression) && !(parent instanceof KtNamedFunction)) {
             parentLookedUp++;
             previousParent = parent;
             parent = parent.getParent();
         }
-        parent = previousParent;
+        // Fall back to the immediate outer functional statement if a hard brace block wasn't present
+        parent = (parent instanceof KtBlockExpression) ? previousParent : expression;
 
-
-        if (parent != null || parent.isValid()) {
-
+        if (parent != null && parent.isValid()) {
             int lineNumber;
-            if (!"finish".equals(functionCallName) && !"startActivityForResult".equals(functionCallName)) {
-                // Line number for log statement
-                if (importLogStatementAvailable) {
-                    lineNumber = getLineNumber(expression) + 1;
-                } else {
-                    lineNumber = getLineNumber(expression) + 3;
-                }
 
-                // Create log statement using KtPsiFactory
+            if (!"finish".equals(functionCallName) && !"startActivityForResult".equals(functionCallName)) {
+                lineNumber = importLogStatementAvailable ? getLineNumber(expression) + 1 : getLineNumber(expression) + 3;
+
                 KtPsiFactory factory = new KtPsiFactory(project);
                 String logStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + functionCallName + "," + kotlinFile + "," + lineNumber + ")\")";
                 KtExpression logStatementElement = factory.createExpression(logStatement);
 
-                PsiElement finalParent = parent;
-                KtCallExpression finalExpression = expression;
-                int finalParentLookedUp = parentLookedUp;
-                WriteCommandAction.runWriteCommandAction(project, () -> {
+                // =========================================================================
+                // 1. CONDITIONAL EVALUATION CLAUSE TRAP (e.g., if (!delete(child)) { ... })
+                // =========================================================================
+                KtIfExpression parentKotlinIf = PsiTreeUtil.getParentOfType(expression, KtIfExpression.class);
+                if (parentKotlinIf != null && parentKotlinIf.getCondition() != null
+                        && PsiTreeUtil.isAncestor(parentKotlinIf.getCondition(), expression, false)) {
 
-                    if (finalParentLookedUp > 1){
-                        PsiElement newLine = factoryKotlin.createNewLine();
-                        finalParent.addAfter(newLine, finalExpression);
+                    WriteCommandAction.runWriteCommandAction(project, () -> {
+                        parentKotlinIf.getParent().addBefore(logStatementElement, parentKotlinIf);
+                        parentKotlinIf.getParent().addBefore(factoryKotlin.createNewLine(), parentKotlinIf);
+                    });
+                    return; // Complete handling early!
+                }
+
+                // =========================================================================
+                // 2. LAMBDA EXPRESSION TRAP (e.g., pref -> editText.getText())
+                // =========================================================================
+                KtLambdaExpression nestedKotlinLambda = PsiTreeUtil.getParentOfType(expression, KtLambdaExpression.class);
+                if (nestedKotlinLambda != null) {
+                    KtExpression outerKotlinExpression = PsiTreeUtil.getParentOfType(nestedKotlinLambda, KtExpression.class);
+                    if (outerKotlinExpression != null) {
+                        WriteCommandAction.runWriteCommandAction(project, () -> {
+                            outerKotlinExpression.getParent().addBefore(logStatementElement, outerKotlinExpression);
+                            outerKotlinExpression.getParent().addBefore(factoryKotlin.createNewLine(), outerKotlinExpression);
+                        });
+                        return; // Complete handling early!
+                    }
+                }
+
+                // =========================================================================
+                // 3. RETURN EXPRESSION TRAP WITH SCOPE PROTECTION (e.g., return apiCall())
+                // =========================================================================
+                KtReturnExpression enclosingKotlinReturn = PsiTreeUtil.getParentOfType(expression, KtReturnExpression.class);
+                // SCOPE VALIDATION: Verify the API call is an actual child of this return expression
+                if (enclosingKotlinReturn != null && PsiTreeUtil.isAncestor(enclosingKotlinReturn, parent, false)) {
+                    WriteCommandAction.runWriteCommandAction(project, () -> {
+                        PsiElement returnParent = enclosingKotlinReturn.getParent();
+
+                        // Kotlin tracks braceless scopes within KtContainerNode or directly under parent If/Loop structures
+                        if (returnParent instanceof KtContainerNode || returnParent instanceof KtIfExpression || returnParent instanceof KtLoopExpression) {
+                            String wrappedKotlinBlock = "{\n" + logStatement + "\n" + enclosingKotlinReturn.getText() + "\n}";
+                            KtExpression newKotlinBlock = factory.createBlock(wrappedKotlinBlock);
+                            enclosingKotlinReturn.replace(newKotlinBlock);
+                        } else {
+                            // Safely wrapped inside braces already
+                            returnParent.addBefore(logStatementElement, enclosingKotlinReturn);
+                            returnParent.addBefore(factory.createNewLine(), enclosingKotlinReturn);
+                        }
+                    });
+                    return; // Complete handling early!
+                }
+
+                // =========================================================================
+                // 4. LOOK AHEAD FOR NEXT ELEMENT EXIT TRAP (e.g., apiCall(); return)
+                // =========================================================================
+                PsiElement nextExpression = PsiTreeUtil.skipWhitespacesAndCommentsForward(parent);
+                boolean followedByExit = false;
+
+                // SCOPE VALIDATION: Confirm next element is an exit expression AND belongs to the same parent container
+                if (nextExpression instanceof KtReturnExpression || nextExpression instanceof KtThrowExpression) {
+                    if (nextExpression.getParent() == parent.getParent()) {
+                        followedByExit = true;
+                    }
+                }
+
+                if (followedByExit) {
+                    PsiElement finalNextExpression = nextExpression;
+                    PsiElement finalParent2 = parent;
+                    WriteCommandAction.runWriteCommandAction(project, () -> {
+                        PsiElement grandParent = finalParent2.getParent();
+                        if (grandParent instanceof KtContainerNode || grandParent instanceof KtIfExpression || grandParent instanceof KtLoopExpression) {
+                            // Structure into a combined code block to protect conditional scope matching
+                            String wrappedKotlinBlock = "{\n" + logStatement + "\n" + finalParent2.getText() + "\n" + finalNextExpression.getText() + "\n}";
+                            KtExpression newKotlinBlock = factory.createBlock(wrappedKotlinBlock);
+
+                            finalNextExpression.delete();
+                            finalParent2.replace(newKotlinBlock);
+                        } else {
+                            // Standard safe sequence block block injection point
+                            grandParent.addBefore(logStatementElement, finalParent2);
+                            grandParent.addBefore(factory.createNewLine(), finalParent2);
+                        }
+                    });
+                    return; // Complete handling early!
+                }
+
+                // =========================================================================
+                // 5. STANDARD INJECTION SEQUENCE PATH (Safe downstream insertion)
+                // =========================================================================
+                PsiElement finalParent = parent;
+                int finalParentLookedUp = parentLookedUp;
+
+                WriteCommandAction.runWriteCommandAction(project, () -> {
+                    if (finalParentLookedUp > 1) {
+                        finalParent.addAfter(factory.createNewLine(), expression);
                     }
 
-                    PsiElement addedElement = finalParent.addAfter(logStatementElement, finalExpression);
+                    PsiElement addedElement = finalParent.addAfter(logStatementElement, expression);
+                    finalParent.addAfter(factory.createNewLine(), expression);
 
-                    // Optional: Add an actual new line for readability
-                    PsiElement newLine = factoryKotlin.createNewLine();
-                    finalParent.addAfter(newLine, finalExpression);
-
-                    // Reformat the added element for proper indentation
+                    // Reformat the added element layout cleanly using current project styles
                     CodeStyleManager.getInstance(project).reformat(addedElement);
                 });
 
-
             } else {
-                // Handle special cases for "finish", "startActivityForResult"
-                if (importLogStatementAvailable) {
-                    lineNumber = getLineNumber(expression) + 2;
-                } else {
-                    lineNumber = getLineNumber(expression) + 4;
-                }
+                // Handle special case execution layouts (finish, startActivityForResult)
+                lineNumber = importLogStatementAvailable ? getLineNumber(expression) + 2 : getLineNumber(expression) + 4;
 
-                // Create log statement
                 KtPsiFactory factory = new KtPsiFactory(project);
                 String logStatement = "Log.d(\"" + Logging_TAG + "\", \"(" + functionCallName + "," + kotlinFile + "," + lineNumber + ")\")";
                 KtExpression logStatementElement = factory.createExpression(logStatement);
 
-                // Insert log statement before the target expression
                 PsiElement finalParent1 = parent;
                 KtCallExpression finalExpression1 = expression;
                 WriteCommandAction.runWriteCommandAction(project, () -> {
                     finalParent1.addBefore(logStatementElement, finalExpression1);
-
-                    // Optional: Add an actual new line for readability
-                    PsiElement newLine = factoryKotlin.createNewLine();
-                    finalParent1.addBefore(newLine, finalExpression1);
+                    finalParent1.addBefore(factory.createNewLine(), finalExpression1);
                 });
             }
 
-        }else{
+        } else {
             System.out.println("[GreenMeter -> addLogStatementToKotlinFile$ Fatal Error: Function call expression is null: There is no function call!");
         }
-
     }
 
-    private void addTimeStamp(PsiMethodCallExpression expression, String methodCallName, String javaFile) {
-
-    }
 
     //This method returns the line number of the input element in the editor
     private int getLineNumber(PsiElement element) {

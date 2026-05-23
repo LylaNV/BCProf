@@ -3,6 +3,7 @@ package com.github.lylanv.secdroid.actions;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.command.WriteCommandAction;
+import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.util.indexing.FileBasedIndex;
 import org.jetbrains.annotations.NotNull;
 
@@ -19,6 +20,7 @@ import java.util.*;
 
 public class DeleteLogs extends AnAction {
 
+    private final String Logging_TAG = "GreenMeter";
     private final String LANGUAGE_JAVA = "java";
     private final String LANGUAGE_KOTLIN = "kotlin";
     Project project; //Holds the project
@@ -101,124 +103,20 @@ public class DeleteLogs extends AnAction {
         javaStatementsToDelete = new ArrayList<>();
         kotlinExpressionsToDelete = new ArrayList<>();
 
-//        //Gets the classes in each file in the project
-//        for (VirtualFile virtualFile : containingFiles) {
-//            /*
-//             * By this "if", we exclude all java and kotlin files that are not in the main folder of the project such as test files
-//             * to be more precise androidTest and test
-//             * Filters the Java files in the project to access the Java files with actual source code of the application
-//             * */
-//            if (virtualFile.getUrl().contains("/src/main")){
-//                PsiManager psiManager = PsiManager.getInstance(project);
-//                PsiFile psiFile = psiManager.findFile(virtualFile);
-//
-//                if (psiFile instanceof PsiJavaFile) {
-//                    psiClasses = convertVirtualFileToPsiClass(project,virtualFile);
-//                    if (psiClasses == null || psiClasses.length == 0) {
-//                        System.out.println("[GreenMeter -> DeleteLogs -> actionPerformed$ Could not retrieve the classes in the file " + virtualFile.getName().trim());
-//                    }else {
-//                        for (PsiClass psiClass : psiClasses) {
-//                            //Get all the methods in the class
-//                            psiMethods = psiClass.getMethods();
-//                            if (psiMethods != null) {
-//                                for (PsiMethod psiMethod : psiMethods) {
-//                                    //Get method body
-//                                    PsiCodeBlock methodBody = psiMethod.getBody();
-//                                    if (methodBody != null) {
-//                                        PsiStatement[] statements = methodBody.getStatements();
-//
-//                                        for (PsiStatement statement : statements) {
-//                                            String text = statement.getText();
-//                                            if (text.contains("Log.d(\"GreenMeter\"")) { //&& (text.contains("METHOD_START") || text.contains("METHOD_END") || text.contains(psiMethod.getName()))
-//                                                javaStatementsToDelete.add(statement);
-//                                            }
-//                                        }
-//                                    }
-//
-//                                }
-//                            }
-//                        }
-//                    }
-//                }else if (psiFile instanceof KtFile) {
-//
-//                    List<KtClass> ktClasses = convertVirtualFileToKotlinClass(project,virtualFile);
-//
-//                    if (ktClasses == null || ktClasses.size() == 0) {
-//                        System.out.println("[GreenMeter -> DeleteLogs -> actionPerformed$ Could not retrieve the classes in the Kotlin file " + virtualFile.getName().trim());
-//                    }else {
-//                        //Extracts the class from the classes list
-//                        for (KtClass kotlinClass : ktClasses) {
-//                            // functions: Holds all the functions inside the input kotlin file and a specific class in that
-//                            List<KtNamedFunction> functions = new ArrayList<>();
-//                            // Get all declarations in the class
-//                            for (KtDeclaration declaration : kotlinClass.getDeclarations()) {
-//                                // Filter for functions
-//                                if (declaration instanceof KtNamedFunction) {
-//                                    functions.add((KtNamedFunction) declaration);
-//                                }
-//                            }
-//
-//                            if (functions.size() > 0) {
-//                                for (KtNamedFunction function : functions) {
-//                                    KtExpression functionBody = function.getBodyExpression();
-//
-//                                    if (functionBody != null) {
-//                                        KtBlockExpression functionBodyBlock = function.getBodyBlockExpression();
-//                                        List<KtExpression> ktExpressions = functionBodyBlock.getStatements();
-//
-//                                        if(ktExpressions.size() > 0) {
-//                                            for (KtExpression ktExpression : ktExpressions) {
-//                                                String textKotlin = ktExpression.getText();
-//                                                if (textKotlin.contains("Log.d(\"GreenMeter\"")) { //&& (textKotlin.contains("METHOD_START") || textKotlin.contains("METHOD_END") || textKotlin.contains(function.getName()))
-//                                                    kotlinExpressionsToDelete.add(ktExpression);
-//                                                }
-//                                            }
-//                                        }
-//                                    }
-//                                }
-//                            }
-//
-//                        }
-//
-//
-//                    }
-//                } else {
-//                    System.out.println("[GreenMeter -> DeleteLogs -> actionPerformed$ Fatal Error: unknown file type: " + virtualFile.getName().trim());
-//                }
-//            }
-//        }
-
-        // Replace your entire file-parsing loop with this:
         for (VirtualFile virtualFile : containingFiles) {
             if (virtualFile.getUrl().contains("/src/main")) {
                 PsiFile psiFile = psiManager.findFile(virtualFile);
                 if (psiFile == null) continue;
 
-                // Use a visitor pattern to find all matching statements implicitly
-                psiFile.accept(new PsiRecursiveElementVisitor() {
-                    @Override
-                    public void visitElement(@NotNull PsiElement element) {
-                        super.visitElement(element);
-
-                        // Handle Java statements
-                        if (element instanceof PsiStatement) {
-                            String text = element.getText();
-                            if (text.contains("Log.d(\"GreenMeter\"")) {
-                                javaStatementsToDelete.add((PsiStatement) element);
-                            }
-                        }
-
-                        // Handle Kotlin expressions
-                        else if (element instanceof KtExpression) {
-                            String text = element.getText();
-                            if (text.contains("Log.d(\"GreenMeter\"")) {
-                                kotlinExpressionsToDelete.add((KtExpression) element);
-                            }
-                        }
-                    }
-                });
+                if (psiFile instanceof PsiJavaFile) {
+                    removeGreenMeterLogsFromJava((PsiJavaFile) psiFile);
+                } else if (psiFile instanceof KtFile) {
+                    removeGreenMeterLogsFromKotlin((KtFile) psiFile);
+                }
             }
         }
+
+        //------------------------------------------------------------------
 
         if (!javaStatementsToDelete.isEmpty()) {
 
@@ -241,6 +139,110 @@ public class DeleteLogs extends AnAction {
             });
         }
     }
+
+
+    //------------------------------------------------------------------
+    private void removeGreenMeterLogsFromJava(PsiJavaFile javaFile) {
+        List<PsiStatement> statementsToDelete = new ArrayList<>();
+
+        // 1. Gather all target statements
+        javaFile.accept(new JavaRecursiveElementWalkingVisitor() {
+            @Override
+            public void visitMethodCallExpression(@NotNull PsiMethodCallExpression expression) {
+                super.visitMethodCallExpression(expression);
+
+                String methodName = expression.getMethodExpression().getReferenceName();
+                if ("d".equals(methodName)) {
+                    PsiExpressionList argumentList = expression.getArgumentList();
+                    if (argumentList != null) {
+                        PsiExpression[] arguments = argumentList.getExpressions();
+                        if (arguments.length > 0) {
+                            String firstArgText = arguments[0].getText();
+                            if (firstArgText.contains(Logging_TAG)) {
+                                // Find the enclosing PsiStatement parent layer so we extract the entire statement including its semicolon
+                                PsiElement statementParent = PsiTreeUtil.getParentOfType(expression, PsiStatement.class);
+                                if (statementParent != null) {
+                                    statementsToDelete.add((PsiStatement) statementParent);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // 2. Delete the statements safely
+        if (!statementsToDelete.isEmpty()) {
+            WriteCommandAction.runWriteCommandAction(project, () -> {
+                for (PsiStatement statement : statementsToDelete) {
+                    if (statement.isValid()) {
+                        // Clean up potential trailing whitespace formatting around the statement
+                        PsiElement nextSibling = statement.getNextSibling();
+                        if (nextSibling instanceof PsiWhiteSpace) {
+                            nextSibling.delete();
+                        }
+                        statement.delete();
+                    }
+                }
+            });
+        }
+    }
+    //------------------------------------------------------------------
+
+    //------------------------------------------------------------------
+
+    private void removeGreenMeterLogsFromKotlin(KtFile ktFile) {
+        List<PsiElement> elementsToDelete = new ArrayList<>();
+
+        // 1. First, gather only the exact GreenMeter log expressions
+        ktFile.accept(new KtTreeVisitorVoid() {
+            @Override
+            public void visitCallExpression(@NotNull KtCallExpression expression) {
+                super.visitCallExpression(expression);
+
+                KtExpression calleeExpression = expression.getCalleeExpression();
+                String functionName = (calleeExpression != null) ? calleeExpression.getText() : null;
+
+                // Target Log.d statements
+                if ("d".equals(functionName)) {
+                    KtValueArgumentList argumentList = expression.getValueArgumentList();
+                    if (argumentList != null) {
+                        List<KtValueArgument> arguments = argumentList.getArguments();
+                        if (!arguments.isEmpty()) {
+                            String firstArgText = arguments.get(0).getText();
+                            // Verify it is specifically a GreenMeter log
+                            if (firstArgText.contains(Logging_TAG)) {
+                                // If it's part of a qualified expression (e.g., Log.d), we must delete the parent expression container
+                                if (expression.getParent() instanceof KtDotQualifiedExpression) {
+                                    elementsToDelete.add(expression.getParent());
+                                } else {
+                                    elementsToDelete.add(expression);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // 2. Perform safe, isolated deletion of the gathered elements
+        if (!elementsToDelete.isEmpty()) {
+            WriteCommandAction.runWriteCommandAction(project, () -> {
+                for (PsiElement element : elementsToDelete) {
+                    if (element.isValid()) {
+                        // Check if there is a trailing whitespace/newline right after the log to clean up formatting
+                        PsiElement nextSibling = element.getNextSibling();
+                        if (nextSibling instanceof PsiWhiteSpace) {
+                            nextSibling.delete();
+                        }
+                        element.delete();
+                    }
+                }
+            });
+        }
+    }
+
+    //------------------------------------------------------------------
 
 
     private Collection<VirtualFile> getAllJavaAndKotlinFiles(Project project) {
