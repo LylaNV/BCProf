@@ -10,6 +10,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.*;
+import java.util.Map.Entry;
 
 import com.github.lylanv.secdroid.inspections.*;
 import com.github.lylanv.secdroid.utils.TwoStringKey;
@@ -361,42 +362,93 @@ public class LogCatReader implements Runnable {
                                                 for (Map.Entry<String,Integer[]> entryCurrent: networkCurrentPackets.entrySet()) {
                                                     for (Map.Entry<String,Integer[]> entryInitial: networkPacketsAtStart.entrySet()){
                                                         if (entryCurrent.getKey().contains(entryInitial.getKey())) {
-                                                            if (entryCurrent.getValue()[0] - entryInitial.getValue()[0] > 0 || entryCurrent.getValue()[1] - entryInitial.getValue()[1] > 0) {
-                                                                //Calculation of battery consumption
-                                                                //Application is using network calculate based on the power
-                                                                //wlan0 -> Wi-Fi
-                                                                //eth0 -> cellular data
-                                                                if (entryCurrent.getKey().contains("wlan0")){ // Wi-Fi
-                                                                    batteryChargeHelper = batteryPercentage(PowerXML.getWifiActive(),selfTimeSeconds,batteryChargeStamp);
-                                                                    hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
 
-                                                                    batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
+                                                            boolean received = (entryCurrent.getValue()[0] - entryInitial.getValue()[0]) > 0;
+                                                            boolean sent = (entryCurrent.getValue()[1] - entryInitial.getValue()[1]) > 0;
 
-                                                                }else if (entryCurrent.getKey().contains("eth0")){// Cellular data
-                                                                    batteryChargeHelper = batteryPercentage(PowerXML.getRadioActive(),selfTimeSeconds,batteryChargeStamp);
-                                                                    hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
-
-                                                                    batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
+                                                            if (entryCurrent.getKey().contains("wlan0")){//Wifi
+                                                                int[] linkSpeedMethod = AdbUtils.wifiLinkSpeed();
+                                                                if (linkSpeedMethod != null && linkSpeedMethod.length != 0){
+                                                                    batteryChargeHelper = calculateNetworkBatteryConsumption(received,sent,entryInitial,entryCurrent,selfTimeSeconds,batteryChargeStamp,linkSpeedMethod);
+                                                                    if (batteryChargeHelper != -1){
+                                                                        hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
+                                                                        batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
+                                                                    }
+                                                                }else {
+                                                                    System.out.println("[GreenEdge -> LogCatReader -> Run$ Wifi link speed is not available!");
                                                                 }
+                                                            }else{//Radio/cellular/modem
+                                                                batteryChargeHelper = calculateNetworkBatteryConsumption(received,sent,entryInitial,entryCurrent,selfTimeSeconds,batteryChargeStamp,null);
+                                                                hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
+                                                                batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
                                                             }
+
+
+
+//                                                            batteryChargeHelper = calculateNetworkBatteryConsumption(received,sent,entryInitial,entryCurrent,selfTimeSeconds,batteryChargeStamp,);
+//                                                            hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
+//                                                            batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
+
+//                                                            if (entryCurrent.getValue()[0] - entryInitial.getValue()[0] > 0 || entryCurrent.getValue()[1] - entryInitial.getValue()[1] > 0) {
+//                                                                //Calculation of battery consumption
+//                                                                //Application is using network calculate based on the power
+//                                                                //wlan0 -> Wi-Fi
+//                                                                //eth0 -> cellular data
+//                                                                if (entryCurrent.getKey().contains("wlan0")){ // Wi-Fi
+//                                                                    batteryChargeHelper = batteryPercentage(PowerXML.getWifiActive(),selfTimeSeconds,batteryChargeStamp);
+//                                                                    hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
+//
+//                                                                    batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
+//
+//                                                                }else if (entryCurrent.getKey().contains("eth0")){// Cellular data
+//                                                                    batteryChargeHelper = batteryPercentage(PowerXML.getRadioActive(),selfTimeSeconds,batteryChargeStamp);
+//                                                                    hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
+//
+//                                                                    batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
+//                                                                }
+//                                                            }
                                                         }
                                                     }
                                                 }
                                             }else if (networkPacketsAtStart.size() == 0 && networkCurrentPackets.size() != 0){
                                                 for (Map.Entry<String,Integer[]> entryCurrent: networkCurrentPackets.entrySet()){
-                                                    if (entryCurrent.getKey().contains("wlan0")){ // Wi-Fi
-                                                        batteryChargeHelper = batteryPercentage(PowerXML.getWifiActive(),selfTimeSeconds,batteryChargeStamp);
+
+                                                    boolean received = (entryCurrent.getValue()[0]) > 0;
+                                                    boolean sent = (entryCurrent.getValue()[1]) > 0;
+
+                                                    if (entryCurrent.getKey().contains("wlan0")){//Wifi
+                                                        int[] linkSpeedMethod = AdbUtils.wifiLinkSpeed();
+                                                        if (linkSpeedMethod != null && linkSpeedMethod.length != 0){
+                                                            batteryChargeHelper = calculateNetworkBatteryConsumption(received,sent,null,entryCurrent,selfTimeSeconds,batteryChargeStamp,linkSpeedMethod);
+                                                            if (batteryChargeHelper != -1){
+                                                                hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
+                                                                batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
+                                                            }
+                                                        }else {
+                                                            System.out.println("[GreenEdge -> LogCatReader -> Run$ Wifi link speed is not available!");
+                                                        }
+                                                    }else{//Radio/cellular/modem
+                                                        batteryChargeHelper = calculateNetworkBatteryConsumption(received,sent,null,entryCurrent,selfTimeSeconds,batteryChargeStamp,null);
                                                         hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
-
-                                                        batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
-
-                                                    }else if (entryCurrent.getKey().contains("eth0")){// Cellular data
-                                                        batteryChargeHelper = batteryPercentage(PowerXML.getRadioActive(),selfTimeSeconds,batteryChargeStamp);
-                                                        hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
-
-
                                                         batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
                                                     }
+//
+//                                                    batteryChargeHelper = calculateNetworkBatteryConsumption(received,sent,entryCurrent,selfTimeSeconds,batteryChargeStamp);
+//                                                    hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
+//                                                    batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
+
+//                                                    if (entryCurrent.getKey().contains("wlan0")){ // Wi-Fi
+//                                                        batteryChargeHelper = batteryPercentage(PowerXML.getWifiActive(),selfTimeSeconds,batteryChargeStamp);
+//                                                        hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
+//
+//                                                        batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
+//
+//                                                    }else if (entryCurrent.getKey().contains("eth0")){// Cellular data
+//                                                        batteryChargeHelper = batteryPercentage(PowerXML.getRadioActive(),selfTimeSeconds,batteryChargeStamp);
+//                                                        hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
+//
+//                                                        batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
+//                                                    }
                                                 }
                                             }else if (networkPacketsAtStart.size() == 0 && networkCurrentPackets.size() == 0){
                                                 System.out.println("[GreenEdge -> LogCatReader -> run$ Fatal Error: Initial and Current network status is not available!");
@@ -719,43 +771,70 @@ public class LogCatReader implements Runnable {
                                     for (Map.Entry<String,Integer[]> entryCurrent: networkCurrentUsageMap.entrySet()) {
                                         for (Map.Entry<String,Integer[]> entryInitial: networkInitialUsageMap.entrySet()){
                                             if (entryCurrent.getKey().contains(entryInitial.getKey())) {
-                                                if (entryCurrent.getValue()[0] - entryInitial.getValue()[0] > 0 || entryCurrent.getValue()[1] - entryInitial.getValue()[1] > 0) {
-                                                    //Application is using network calculate based on the power
-                                                    //wlan0 -> Wi-Fi
-                                                    //eth0 -> cellular data
-                                                    if (entryCurrent.getKey().contains("wlan0")){ // Wi-Fi
+                                                boolean received = (entryCurrent.getValue()[0] - entryInitial.getValue()[0]) > 0;
+                                                boolean sent = (entryCurrent.getValue()[1] - entryInitial.getValue()[1]) > 0;
 
-                                                        batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getWifiActive());
-
-                                                    }else if (entryCurrent.getKey().contains("eth0")){ // Cellular data
-
-                                                        batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getRadioActive());
-
+                                                if (entryCurrent.getKey().contains("wlan0")) {//Wifi
+                                                    int[] linkSpeed = AdbUtils.wifiLinkSpeed();
+                                                    if (linkSpeed != null && linkSpeed.length != 0){
+                                                        calculateNetworkBatteryConsumptionInOneSecond(received,sent,entryInitial,entryCurrent,linkSpeed);
+                                                    }else {
+                                                        System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$ Link speed is not available!");
                                                     }
+                                                }else {//Radio/cellular/modem
+                                                    calculateNetworkBatteryConsumptionInOneSecond(received,sent,entryInitial,entryCurrent,null);
+                                                }
 
-                                                    //Updating network status
-                                                    Integer[] newValues = entryCurrent.getValue();
-                                                    Integer[] oldValues = entryInitial.getValue();
+//                                                calculateNetworkBatteryConsumptionInOneSecond(received,sent,entryCurrent);
+
+                                                //Updating network status
+                                                Integer[] newValues = entryCurrent.getValue();
+                                                Integer[] oldValues = entryInitial.getValue();
 
                                                     /* Replacing map value
                                                     public V replace(K key, V newValue)
                                                     public boolean replace(K key, V oldValue, V newValue)*/
-                                                    networkInitialUsageMap.replace(entryCurrent.getKey(), newValues);
-                                                }
+                                                networkInitialUsageMap.replace(entryCurrent.getKey(), newValues);
+//                                                if (received || sent){
+////                                                if (entryCurrent.getValue()[0] - entryInitial.getValue()[0] > 0 || entryCurrent.getValue()[1] - entryInitial.getValue()[1] > 0) {
+//                                                    //Application is using network calculate based on the power
+//                                                    //wlan0 -> Wi-Fi
+//                                                    //eth0 -> cellular data
+//                                                    if (entryCurrent.getKey().contains("wlan0")){ // Wi-Fi
+//                                                        batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getWifiActive());
+//                                                    }else if (entryCurrent.getKey().contains("eth0")){ // Cellular data
+//                                                        batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getRadioActive());
+//                                                    }
+//                                                }
                                             }
                                         }
                                     }
                                 }else if (networkInitialUsageMap.size() == 0 && networkCurrentUsageMap.size() != 0){
-                                    for (Map.Entry<String,Integer[]> entryCurrent: networkCurrentUsageMap.entrySet()){
-                                        if (entryCurrent.getKey().contains("wlan0")){ // Wi-Fi
+                                    // if it is the first time we check the network just copy the current netwoek status and continue
+                                    // this strategy introduces very small inaccuracy
 
-                                            batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getWifiActive());
-
-                                        }else if (entryCurrent.getKey().contains("eth0")){ // Cellular data
-
-                                            batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getRadioActive());
-                                        }
-                                    }
+//                                    for (Map.Entry<String,Integer[]> entryCurrent: networkCurrentUsageMap.entrySet()){
+//                                        boolean received = (entryCurrent.getValue()[0]) > 0;
+//                                        boolean sent = (entryCurrent.getValue()[1]) > 0;
+//
+//                                        int[] linkSpeed = AdbUtils.wifiLinkSpeed();
+//                                        if (linkSpeed != null && linkSpeed.length != 0){
+//                                            calculateNetworkBatteryConsumptionInOneSecond(received,sent,null,entryCurrent,linkSpeed);
+//                                        }else {
+//                                            System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$ Link speed is not available!");
+//                                        }
+//
+////                                        calculateNetworkBatteryConsumptionInOneSecond(received,sent,entryCurrent);
+//
+////                                        if (entryCurrent.getKey().contains("wlan0")){ // Wi-Fi
+////
+////                                            batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getWifiActive());
+////
+////                                        }else if (entryCurrent.getKey().contains("eth0")){ // Cellular data
+////
+////                                            batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getRadioActive());
+////                                        }
+//                                    }
                                     networkInitialUsageMap.putAll(networkCurrentUsageMap);
                                 }else if (networkInitialUsageMap.size() == 0 && networkCurrentUsageMap.size() == 0){
                                     System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$ Fatal Error: Initial and Current network status is not available!");
@@ -768,7 +847,7 @@ public class LogCatReader implements Runnable {
                                     networkInitialUsageMap.put(entryCurrent.getKey(), entryCurrent.getValue());
                                 }
                             } else {
-                                System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$ Fatal Error: Current network status is not available!");
+                                System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$ Current network status is not available or Network is not in use!");
                             }
 
                         }
@@ -799,6 +878,297 @@ public class LogCatReader implements Runnable {
      *                                       HELPER METHODS
      * ********************************************************************************************************
      * */
+
+
+    // Wifi and Radio/Modem energy calculation in one second
+    public void calculateNetworkBatteryConsumptionInOneSecond(boolean received, boolean sent, Entry<String,Integer[]> entryInit, Entry<String,Integer[]> entryCurrent, int[] linkSpeed) {
+        if (received && sent){
+//            System.out.println("[WIFI BOTH ACTIVE");
+            if (entryCurrent.getKey().contains("wlan0")){ // Wi-Fi
+                double receivedBits;
+                double transmitBits;
+
+                if (entryInit != null){ //Network was used before
+                    //calculating the time
+                    receivedBits = ((entryCurrent.getValue()[0] - entryInit.getValue()[0]) * 8)/1000000;
+                    transmitBits = ((entryCurrent.getValue()[1] - entryInit.getValue()[1]) * 8)/1000000;
+
+
+                }else { //first time network usage
+                    //calculating the time
+                    receivedBits = (entryCurrent.getValue()[0] * 8)/1000000;
+                    transmitBits = (entryCurrent.getValue()[1] * 8)/1000000;
+                }
+
+                double receivedTime;
+                double transmitTime;
+
+                if (linkSpeed != null && linkSpeed.length != 0){
+                    receivedTime = receivedBits/linkSpeed[1];
+                    transmitTime = transmitBits/linkSpeed[0];
+                }else {
+                    return;
+                }
+                double batteryHolder = batteryLevel;
+
+                batteryLevel = batteryLevel - batteryPercentage(PowerXML.getWifiReceive(),receivedTime,batteryHolder);
+                batteryLevel = batteryLevel - batteryPercentage(PowerXML.getWifiSend(),transmitTime,batteryHolder);
+
+//                batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getWifiSend() + PowerXML.getWifiReceive());
+            }else if (entryCurrent.getKey().contains("eth0")){ // Cellular data
+                // Check the level
+                int mLevel = entryCurrent.getValue()[2];
+                switch (mLevel){
+                    case 0:
+                        batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getModemTX0() + PowerXML.getModemRX());
+                        break;
+                    case 1:
+                        batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getModemTX1() + PowerXML.getModemRX());
+                        break;
+                    case 2:
+                        batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getModemTX2() + PowerXML.getModemRX());
+                        break;
+                    case 3:
+                        batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getModemTX3() + PowerXML.getModemRX());
+                        break;
+                    case 4:
+                        batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getModemTX4() + PowerXML.getModemRX());
+                        break;
+                    default:
+                        if (PowerXML.getRadioActive()>0){
+                            batteryLevel = batteryLevel - batteryPercentageInOneSecond (PowerXML.getRadioActive());
+                        }else {
+                            // TODO: Check the assumption with Prof. Paulo
+                            // We assumed if there aren't level and radioActive values, the signal is weak
+                            batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getModemTX4() + PowerXML.getModemRX());
+                        }
+                        break;
+                }
+
+            }
+        } else if (received && !sent) {
+            if (entryCurrent.getKey().contains("wlan0")){ // Wi-Fi
+                double receivedBits;
+                if (entryInit != null){ //Network was used before
+                    //calculating the time
+                    receivedBits = ((entryCurrent.getValue()[0] - entryInit.getValue()[0]) * 8)/1000000;
+                }else { //first time network usage
+                    //calculating the time
+                    receivedBits = (entryCurrent.getValue()[0] * 8)/1000000;
+                }
+
+                double receivedTime;
+                if (linkSpeed != null && linkSpeed.length != 0){
+                    receivedTime = receivedBits/linkSpeed[1];
+                }else {
+                    return;
+                }
+
+                double batteryHolder = batteryLevel;
+
+                batteryLevel = batteryLevel - batteryPercentage(PowerXML.getWifiReceive(),receivedTime,batteryHolder);
+//                batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getWifiReceive());
+            }else if (entryCurrent.getKey().contains("eth0")){ // Cellular data
+                batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getModemRX());
+            }
+        } else if (!received && sent) {
+            if (entryCurrent.getKey().contains("wlan0")){ // Wi-Fi
+                double transmitBits;
+                if (entryInit != null){ //Network was used before
+                    //calculating the time
+                    transmitBits = ((entryCurrent.getValue()[1] - entryInit.getValue()[1]) * 8)/1000000;
+                }else { //first time network usage
+                    //calculating the time
+                    transmitBits = (entryCurrent.getValue()[1] * 8)/1000000;
+                }
+
+                double transmitTime;
+                if (linkSpeed != null && linkSpeed.length != 0){
+                    transmitTime = transmitBits/linkSpeed[0];
+                }else {
+                    return;
+                }
+                double batteryHolder = batteryLevel;
+                batteryLevel = batteryLevel - batteryPercentage(PowerXML.getWifiSend(),transmitTime,batteryHolder);
+
+//                batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getWifiSend());
+            }else if (entryCurrent.getKey().contains("eth0")){ // Cellular data
+                // Check the level
+                int mLevel = entryCurrent.getValue()[2];
+                switch (mLevel){
+                    case 0:
+                        batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getModemTX0());
+                        break;
+                    case 1:
+                        batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getModemTX1());
+                        break;
+                    case 2:
+                        batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getModemTX2());
+                        break;
+                    case 3:
+                        batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getModemTX3());
+                        break;
+                    case 4:
+                        batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getModemTX4());
+                        break;
+                    default:
+                        if (PowerXML.getRadioActive()>0){
+                            batteryLevel = batteryLevel - batteryPercentageInOneSecond (PowerXML.getRadioActive());
+                        }else {
+                            // TODO: Check the assumption with Prof. Paulo
+                            // We assumed if there aren't level and radioActive value, the signal is weak
+                            batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getModemTX4());
+                        }
+                        break;
+                }
+
+            }
+        }
+    }
+
+    // Wifi and Radio/Modem energy calculation during a period
+    public double calculateNetworkBatteryConsumption(boolean received, boolean sent, Entry<String,Integer[]> entryInit, Entry<String,Integer[]> entryCurrent, double selfTimePeriod, double stamp,int[] linkSpeed) {
+        double batteryConsumptionHelper = 0;
+        if (received && sent){
+            if (entryCurrent.getKey().contains("wlan0")){ // Wi-Fi
+                double receivedBits;
+                double transmitBits;
+
+                if (entryInit != null){ //Network was used before
+                    //calculating the time
+                    receivedBits = ((entryCurrent.getValue()[0] - entryInit.getValue()[0]) * 8)/1000000;
+                    transmitBits = ((entryCurrent.getValue()[1] - entryInit.getValue()[1]) * 8)/1000000;
+
+
+                }else { //first time network usage
+                    //calculating the time
+                    receivedBits = (entryCurrent.getValue()[0] * 8)/1000000;
+                    transmitBits = (entryCurrent.getValue()[1] * 8)/1000000;
+                }
+
+                double receivedTime;
+                double transmitTime;
+
+                if (linkSpeed != null && linkSpeed.length != 0){
+                    receivedTime = receivedBits/linkSpeed[1];
+                    transmitTime = transmitBits/linkSpeed[0];
+                }else {
+                    return -1;
+                }
+
+                batteryConsumptionHelper = batteryPercentage(PowerXML.getWifiReceive(),receivedTime,stamp);
+                batteryConsumptionHelper = batteryConsumptionHelper + batteryPercentage(PowerXML.getWifiSend(),transmitTime,stamp);
+
+//                batteryConsumptionHelper = batteryPercentage((PowerXML.getWifiSend() + PowerXML.getWifiReceive()),selfTimePeriod,stamp);
+                return batteryConsumptionHelper;
+            }else if (entryCurrent.getKey().contains("eth0")){ // Cellular data
+                // Check the level
+                int mLevel = entryCurrent.getValue()[2];
+                switch (mLevel){
+                    case 0:
+                        batteryConsumptionHelper = batteryPercentage((PowerXML.getModemTX0() + PowerXML.getModemRX()),selfTimePeriod,stamp);
+                        return batteryConsumptionHelper;
+                    case 1:
+                        batteryConsumptionHelper = batteryPercentage((PowerXML.getModemTX1() + PowerXML.getModemRX()),selfTimePeriod,stamp);
+                        return batteryConsumptionHelper;
+                    case 2:
+                        batteryConsumptionHelper = batteryPercentage((PowerXML.getModemTX2() + PowerXML.getModemRX()),selfTimePeriod,stamp);
+                        return batteryConsumptionHelper;
+                    case 3:
+                        batteryConsumptionHelper = batteryPercentage((PowerXML.getModemTX3() + PowerXML.getModemRX()),selfTimePeriod,stamp);
+                        return batteryConsumptionHelper;
+                    case 4:
+                        batteryConsumptionHelper = batteryPercentage((PowerXML.getModemTX4() + PowerXML.getModemRX()),selfTimePeriod,stamp);
+                        return batteryConsumptionHelper;
+                    default:
+                        if (PowerXML.getRadioActive()>0){
+                            batteryConsumptionHelper = batteryPercentage(PowerXML.getRadioActive(),selfTimePeriod,stamp);
+                        }else {
+                            // TODO: Check the assumption with Prof. Paulo
+                            // We assumed if there aren't level and radioActive values, the signal is weak
+                            batteryConsumptionHelper = batteryPercentage((PowerXML.getModemTX4() + PowerXML.getModemRX()),selfTimePeriod,stamp);
+                        }
+                        return batteryConsumptionHelper;
+                }
+
+            }
+        } else if (received && !sent) {
+            if (entryCurrent.getKey().contains("wlan0")){ // Wi-Fi
+                double receivedBits;
+                if (entryInit != null){ //Network was used before
+                    //calculating the time
+                    receivedBits = ((entryCurrent.getValue()[0] - entryInit.getValue()[0]) * 8)/1000000;
+                }else { //first time network usage
+                    //calculating the time
+                    receivedBits = (entryCurrent.getValue()[0] * 8)/1000000;
+                }
+                double receivedTime;
+                if (linkSpeed != null && linkSpeed.length != 0){
+                    receivedTime = receivedBits/linkSpeed[1];
+                }else {
+                    return -1;
+                }
+                batteryConsumptionHelper = batteryPercentage(PowerXML.getWifiReceive(),receivedTime,stamp);
+
+//                batteryConsumptionHelper =  batteryPercentage(PowerXML.getWifiReceive(),selfTimePeriod,stamp);
+                return batteryConsumptionHelper;
+            }else if (entryCurrent.getKey().contains("eth0")){ // Cellular data
+                batteryConsumptionHelper = batteryPercentage(PowerXML.getModemRX(),selfTimePeriod,stamp);
+                return batteryConsumptionHelper;
+            }
+        } else if (!received && sent) {
+            if (entryCurrent.getKey().contains("wlan0")){ // Wi-Fi
+                double transmitBits;
+                if (entryInit != null){ //Network was used before
+                    //calculating the time
+                    transmitBits = ((entryCurrent.getValue()[1] - entryInit.getValue()[1]) * 8)/1000000;
+                }else { //first time network usage
+                    //calculating the time
+                    transmitBits = (entryCurrent.getValue()[1] * 8)/1000000;
+                }
+                double transmitTime;
+                if (linkSpeed != null && linkSpeed.length != 0){
+                    transmitTime = transmitBits/linkSpeed[0];
+                }else {
+                    return -1;
+                }
+                batteryConsumptionHelper = batteryPercentage(PowerXML.getWifiSend(),transmitTime,stamp);
+//                batteryConsumptionHelper =  batteryPercentage(PowerXML.getWifiSend(),selfTimePeriod,stamp);
+                return batteryConsumptionHelper;
+            }else if (entryCurrent.getKey().contains("eth0")){ // Cellular data
+                // Check the level
+                int mLevel = entryCurrent.getValue()[2];
+                switch (mLevel){
+                    case 0:
+                        batteryConsumptionHelper = batteryPercentage(PowerXML.getModemTX0(),selfTimePeriod,stamp);
+                        return batteryConsumptionHelper;
+                    case 1:
+                        batteryConsumptionHelper = batteryPercentage(PowerXML.getModemTX1(),selfTimePeriod,stamp);
+                        return batteryConsumptionHelper;
+                    case 2:
+                        batteryConsumptionHelper = batteryPercentage(PowerXML.getModemTX2(),selfTimePeriod,stamp);
+                        return batteryConsumptionHelper;
+                    case 3:
+                        batteryConsumptionHelper = batteryPercentage(PowerXML.getModemTX3(),selfTimePeriod,stamp);
+                        return batteryConsumptionHelper;
+                    case 4:
+                        batteryConsumptionHelper = batteryPercentage(PowerXML.getModemTX4(),selfTimePeriod,stamp);
+                        return batteryConsumptionHelper;
+                    default:
+                        if (PowerXML.getRadioActive()>0){
+                            batteryConsumptionHelper = batteryPercentage(PowerXML.getRadioActive(),selfTimePeriod,stamp);
+                        }else {
+                            // TODO: Check the assumption with Prof. Paulo
+                            // We assumed if there isn't level and radioActivie value, the signal is weak
+                            batteryConsumptionHelper = batteryPercentage(PowerXML.getModemTX4(),selfTimePeriod,stamp);
+                        }
+                        return batteryConsumptionHelper;
+                }
+
+            }
+        }
+        return batteryConsumptionHelper;
+    }
 
     // Shows a dialog window in the android studio with the input message
     public static void showSystemUsageDialog(String message) {

@@ -7,6 +7,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class AdbUtils {
     private static String adbPath = "/Users/lylan/UiO/android/platform-tools/adb";
@@ -282,11 +284,24 @@ public class AdbUtils {
                         }
 
                         String interfaceName = parts[1].replace(":", "");
-                        numberOfPacketsReceived = Integer.valueOf(parts[3]); // 3rd column is received packets
-                        numberOfPacketsSent = Integer.valueOf(parts[11]); // 11th column is transmitted packets
+                        numberOfPacketsReceived = Integer.valueOf(parts[2]); // 3rd column is received packets
+                        numberOfPacketsSent = Integer.valueOf(parts[10]); // 11th column is transmitted packets
                         //System.out.println("[AdbUtils -> numberOfPackagePackets$ Interface: " + interfaceName + ", Number of received packets: " + numberOfPacketsReceived + ", Number of sent packets: " + numberOfPacketsSent);
 
-                        map.put(interfaceName, new Integer[]{numberOfPacketsReceived, numberOfPacketsSent});
+
+//                        String interfaceName = parts[1].replace(":", "");
+//                        numberOfPacketsReceived = Integer.valueOf(parts[3]); // 3rd column is received packets
+//                        numberOfPacketsSent = Integer.valueOf(parts[11]); // 11th column is transmitted packets
+//                        //System.out.println("[AdbUtils -> numberOfPackagePackets$ Interface: " + interfaceName + ", Number of received packets: " + numberOfPacketsReceived + ", Number of sent packets: " + numberOfPacketsSent);
+
+                        if (interfaceName.contains("wlan0")) {
+                            map.put(interfaceName, new Integer[]{numberOfPacketsReceived, numberOfPacketsSent});
+                        } else if (interfaceName.contains("eth0")) {
+                            // get signal strength
+                            int modemLevel = getModemLevel();
+                            // modemLevel = -1 means we could not get the level, level is in range of [0-4]
+                            map.put(interfaceName, new Integer[]{numberOfPacketsReceived, numberOfPacketsSent, modemLevel});
+                        }
                     }
                 }
 
@@ -309,6 +324,100 @@ public class AdbUtils {
             return null;
         }
     }
+
+    //Returns Tx and Rx link speed for wifi
+    public static int[] wifiLinkSpeed() {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(adbPath, "shell", "cmd", "wifi", "status");
+            Process pbProcess = pb.start();
+
+            if (pbProcess != null) {
+                int txLinkSpeedMbps = -1;
+                int rxLinkSpeedMbps = -1;
+
+                int[] linkSpeedsMbps = new int[2]; //index 0 => tx, index 1 => rx
+                linkSpeedsMbps[0] = -1;
+                linkSpeedsMbps[1] = -1;
+
+                BufferedReader reader = new BufferedReader(new InputStreamReader(pbProcess.getInputStream()));
+
+                Pattern txPattern = Pattern.compile("Tx Link speed:\\s*(\\d+)\\s*Mbps?");
+                Pattern rxPattern = Pattern.compile("Rx Link speed:\\s*(\\d+)\\s*Mbps?");
+
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    Matcher txMatcher = txPattern.matcher(line);
+                    if (txMatcher.find()) {
+                        txLinkSpeedMbps = Integer.parseInt(txMatcher.group(1));
+                        linkSpeedsMbps[0] = txLinkSpeedMbps;
+//                        System.out.println("[AdbUtils -> wifiLinkSpeed$  TRANSMIT LINK SPEED: " + txLinkSpeedMbps + " Mbps");
+                    }
+
+                    Matcher rxMatcher = rxPattern.matcher(line);
+                    if (rxMatcher.find()) {
+                        rxLinkSpeedMbps = Integer.parseInt(rxMatcher.group(1));
+                        linkSpeedsMbps[1] = rxLinkSpeedMbps;
+//                        System.out.println("[AdbUtils -> wifiLinkSpeed$  RECEIVE LINK SPEED: " + rxLinkSpeedMbps + " Mbps");
+                    }
+                }
+
+                reader.close();
+
+                if (linkSpeedsMbps.length == 2){
+                    if (linkSpeedsMbps[0] != -1 &&  linkSpeedsMbps[1] != -1){
+                        return linkSpeedsMbps;
+                    }
+                    System.out.println("[AdbUtils -> wifiLinkSpeed$ FATAL ERROR. Wifi rx and tx links speeds are not valid values, returning null.");
+                    return null;
+                } else {
+                    System.out.println("[AdbUtils -> wifiLinkSpeed$ FATAL ERROR. Wifi speeds array has invalid length.");
+                    return null;
+                }
+            } else {
+                System.out.println("[AdbUtils -> wifiLinkSpeed$ FATAL ERROR. Failed to create the adb command and get the wifi uplink and downlink speeds.");
+                return null;
+            }
+
+        }catch (Exception e){
+            e.printStackTrace();
+            System.out.println("[AdbUtils -> wifiLinkSpeed$ FATAL ERROR: IO Error. Failed to run the adb command and get the wifi uplink and downlink speeds. Exception: " + e.getMessage());
+            return null;
+        }
+    }
+
+
+    public static int getModemLevel(){
+        ProcessBuilder pb = new ProcessBuilder(adbPath, "shell", "dumpsys", "telephony.registry", "|", "grep", "\"mSignalStrength\"");
+        try {
+            Process pbProcess = pb.start();
+            if (pbProcess != null) {
+                BufferedReader reader = new BufferedReader(new InputStreamReader(pbProcess.getInputStream()));
+                Pattern pattern = Pattern.compile("mLevel=(\\d+)");
+                int mLevel = -1; // default if not found
+
+                String line;
+
+                while ((line = reader.readLine()) != null) {
+                    Matcher matcher = pattern.matcher(line);
+                    if (matcher.find()) {
+                        mLevel = Integer.parseInt(matcher.group(1));
+                        break;
+                    }
+                }
+                reader.close();
+                return mLevel;
+
+            }else {
+                System.out.println("[AdbUtils -> getModemLevel$ FATAL ERROR: Reader process is null.");
+                return -1;
+            }
+        } catch (IOException e) {
+            System.out.println("[AdbUtils -> getModemLevel$ FATAL ERROR: Reader process cannot start." + "\n" + "Error is: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException(e);
+        }
+    }
+
 
 //    //Returns Number of Received and sent packets over WiFi and Cellular data
 //    public static Map<String,Integer[]> numberOfPackets() {

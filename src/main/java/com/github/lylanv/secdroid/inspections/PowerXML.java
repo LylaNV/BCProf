@@ -7,7 +7,8 @@ public class PowerXML {
     //public static double wifiActive = 31, radioActive = 200, gpsOn = 50, gpsSignalQualityBasedWeak = 10, gpsSignalQualityBasedStrong = 30, screenOn = 200, screenFull = 200, cameraAvg = 600, bluetoothActive = 20;
 
     //FOR Motorola Moto G24 -> screenFull = 311, cameraAvg = 550 OR cameraAvg = 0.917
-    public static double wifiActive = 140, radioActive = 200, gpsOn = 31, gpsSignalQualityBasedWeak = 7, gpsSignalQualityBasedStrong = 33, screenOn = 120, screenFull = 311, cameraAvg = 550, bluetoothActive = 20;
+    public static double wifiActive = 140, wifiTx = 350, wifiRx = 125, radioActive = 200, modemRX = 0, modemTX0 = 116, modemTX1 = 161, modemTX2 = 222, modemTX3 = 273, modemTX4 = 358,
+            gpsOn = 31, gpsSignalQualityBasedWeak = 7, gpsSignalQualityBasedStrong = 33, screenOn = 120, screenFull = 311, cameraAvg = 550, bluetoothActive = 20, bluetoothRx = 109, bluetoothTx = 93;
 
     //For Samsung A17
 //    public static double wifiActive = 140, radioActive = 200, gpsOn = 37.8, screenOn = 71.5, screenFull = 255.25, cameraAvg = 173.6, bluetoothTx = 93, bluetoothRx = 109;
@@ -16,6 +17,19 @@ public class PowerXML {
     //https://www.biologic.net/topics/battery-states-state-of-charge-soc-state-of-health-soh/
     public static double stateOfHealth = 100; //100%
     public static double batteryCapacity = 5000; //mAh
+
+    public static double getWifiSend(){ return wifiTx; }
+    public static double getWifiReceive(){ return wifiRx; }
+
+    public static double getModemRX() { return modemRX; }
+    public static double getModemTX0() { return modemTX0; }
+    public static double getModemTX1() { return modemTX1; }
+    public static double getModemTX2() { return modemTX2; }
+    public static double getModemTX3() { return modemTX3; }
+    public static double getModemTX4() { return modemTX4; }
+
+    public static double getBluetoothRx() { return bluetoothRx; }
+    public static double getBluetoothTx() { return bluetoothTx; }
 
     public static void setWifiActive(double inWifiActive){
         wifiActive = inWifiActive;
