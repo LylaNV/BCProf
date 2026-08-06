@@ -20,7 +20,7 @@ import java.util.*;
 
 public class DeleteLogs extends AnAction {
 
-    private final String Logging_TAG = "GreenMeter";
+    private final String Logging_TAG = "BPDroid";
     private final String LANGUAGE_JAVA = "java";
     private final String LANGUAGE_KOTLIN = "kotlin";
     Project project; //Holds the project

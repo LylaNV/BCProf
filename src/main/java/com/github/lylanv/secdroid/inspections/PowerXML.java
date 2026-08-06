@@ -3,15 +3,18 @@ package com.github.lylanv.secdroid.inspections;
 public class PowerXML {
 
     // https://source.android.com/docs/core/power/values
+    //https://source.android.com/docs/core/power/component
     //All the numbers are from the above link except bluetoothActive
-    //public static double wifiActive = 31, radioActive = 200, gpsOn = 50, gpsSignalQualityBasedWeak = 10, gpsSignalQualityBasedStrong = 30, screenOn = 200, screenFull = 200, cameraAvg = 600, bluetoothActive = 20;
+    public static double wifiActive = 31, wifiTx = 31, wifiRx = 31, radioActive = 200, modemRX = 0, modemTX0 = 100, modemTX1 = 200, modemTX2 = 300, modemTX3 = 400, modemTX4 = 500,
+            gpsOn = 50, gpsSignalQualityBasedWeak = 10, gpsSignalQualityBasedStrong = 30, screenOn = 200, screenFull = 200, cameraAvg = 600, bluetoothActive = 20, bluetoothRx = 20, bluetoothTx = 20;
 
     //FOR Motorola Moto G24 -> screenFull = 311, cameraAvg = 550 OR cameraAvg = 0.917
-    public static double wifiActive = 140, wifiTx = 350, wifiRx = 125, radioActive = 200, modemRX = 0, modemTX0 = 116, modemTX1 = 161, modemTX2 = 222, modemTX3 = 273, modemTX4 = 358,
-            gpsOn = 31, gpsSignalQualityBasedWeak = 7, gpsSignalQualityBasedStrong = 33, screenOn = 120, screenFull = 311, cameraAvg = 550, bluetoothActive = 20, bluetoothRx = 109, bluetoothTx = 93;
+//    public static double wifiActive = 140, wifiTx = 350, wifiRx = 125, radioActive = 200, modemRX = 0, modemTX0 = 116, modemTX1 = 161, modemTX2 = 222, modemTX3 = 273, modemTX4 = 358,
+//            gpsOn = 31, gpsSignalQualityBasedWeak = 7, gpsSignalQualityBasedStrong = 33, screenOn = 120, screenFull = 311, cameraAvg = 550, bluetoothActive = 20, bluetoothRx = 20, bluetoothTx = 20;
 
     //For Samsung A17
-//    public static double wifiActive = 140, radioActive = 200, gpsOn = 37.8, screenOn = 71.5, screenFull = 255.25, cameraAvg = 173.6, bluetoothTx = 93, bluetoothRx = 109;
+//    public static double wifiActive = 0, wifiTx = 275, wifiRx = 75, radioActive = 0, modemRX = 93, modemTX0 = 130, modemTX1 = 143, modemTX2 = 195, modemTX3 = 257, modemTX4 = 323,
+//            gpsOn = 37.8, gpsSignalQualityBasedWeak = 0, gpsSignalQualityBasedStrong = 0, screenOn = 71.5, screenFull = 255.25, cameraAvg = 173.6, bluetoothActive = 0, bluetoothRx = 109, bluetoothTx = 93;
 
     //https://www.biologic.net/topics/battery-states-state-of-charge-soc-state-of-health-soh/#:~:text=The%20state%2Dof%2Dhealth%20(,charge%20to%20its%20rated%20capacity.
     //https://www.biologic.net/topics/battery-states-state-of-charge-soc-state-of-health-soh/

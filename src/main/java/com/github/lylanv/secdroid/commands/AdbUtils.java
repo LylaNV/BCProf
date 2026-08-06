@@ -616,19 +616,7 @@ public class AdbUtils {
      * isUsingGPS
      ****************************************************************** */
 
-    //returns true if the application is using the GPS, otherwise it returns false
-    public static boolean isUsingGPS(String appPackageName) {
-        try {
-            ProcessBuilder pb = new ProcessBuilder(adbPath, "shell", "dumpsys", "location", "|", "grep", "\"gps", "provider", "request\"");
-            Process pbProcess = pb.start();
-
-            boolean packageVisited = false;
-            boolean gpsOffVisited = false;
-
-            if (pbProcess != null) {
-                BufferedReader reader = new BufferedReader(new InputStreamReader(pbProcess.getInputStream()));
-
-//                String line;
+    //                String line;
 //                boolean gpsFound = false;
 //                while ((line = reader.readLine()) != null) {
 //                    if(gpsFound){
@@ -719,6 +707,18 @@ public class AdbUtils {
 //                    return false;
 //                }
 
+    //returns true if the application is using the GPS, otherwise it returns false
+    public static boolean isUsingGPS(String appPackageName) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(adbPath, "shell", "dumpsys", "location", "|", "grep", "\"gps", "provider", "request\"");
+//            ProcessBuilder pb = new ProcessBuilder(adbPath, "shell", "dumpsys", "location");
+            Process pbProcess = pb.start();
+
+            boolean packageVisited = false;
+            boolean gpsOffVisited = false;
+
+            if (pbProcess != null) {
+                BufferedReader reader = new BufferedReader(new InputStreamReader(pbProcess.getInputStream()));
 
                 String line;
                 int counterAPK = 0;

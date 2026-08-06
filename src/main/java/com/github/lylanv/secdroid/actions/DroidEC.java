@@ -45,7 +45,7 @@ public class DroidEC extends AnAction {
     PsiDirectory projectDirectory; //Holds the project directory
     ImportChecker importChecker; //Holds an instance of ImportChecker class -> this variable is used to check the list of the imports in the project and add any missing one
     Boolean importLogStatementAvailable; //Determines if there is any missing import
-    private final String Logging_TAG = "GreenMeter"; //A TAG that we use in adding logs, so we can differentiate our added logs from rest of logs
+    private final String Logging_TAG = "BPDroid"; //A TAG that we use in adding logs, so we can differentiate our added logs from rest of logs
     private final String MethodStart_TAG = "METHOD_START";
     private final String MethodEnd_TAG = "METHOD_END";
 

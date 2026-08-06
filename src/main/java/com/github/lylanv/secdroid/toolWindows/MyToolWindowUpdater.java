@@ -29,7 +29,7 @@ public class MyToolWindowUpdater {
     public void refreshToolWindow() {
 
         if (!project.isDisposed()) {
-            ToolWindow toolWindow = ToolWindowManager.getInstance(project).getToolWindow("TestingToolWindow");
+            ToolWindow toolWindow = ToolWindowManager.getInstance(project).getToolWindow("BPDroid Tool Window");
             if (toolWindow != null) {
                 LogcatAnalyzerToolWindowFactory.refreshToolWindow();
             }

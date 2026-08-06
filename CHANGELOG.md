@@ -12,3 +12,6 @@
 - Remove `pluginUntilBuild` obsolete property
 - Gradle - upgrade `org.gradle.toolchains.foojay-resolver-convention` in `settings.gradle.kts` from `0.8.0` to `1.0.0`
 - Added Java dependency to the `plugin.xml` file.
+
+- Changed the log statements tag to `BPDroid`
+- Changed the tool window id from `MyToolWindow` to `BPDroid Tool Window`

@@ -17,7 +17,7 @@
 
     <extensions defaultExtensionNs="com.intellij">
 <!--        <toolWindow factoryClass="com.github.lylanv.secdroid.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>-->
-        <toolWindow factoryClass="com.github.lylanv.secdroid.toolWindows.LogcatAnalyzerToolWindowFactory" id="TestingToolWindow" anchor="left"/>
+        <toolWindow factoryClass="com.github.lylanv.secdroid.toolWindows.LogcatAnalyzerToolWindowFactory" id="BPDroid Tool Window" anchor="left"/>
     </extensions>
 
 

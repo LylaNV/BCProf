@@ -20,7 +20,7 @@ import com.intellij.openapi.ui.Messages;
 
 public class LogCatReader implements Runnable {
 
-    private final String TAG = "GreenMeter"; // Logging tag -> will be used to filter the logcat file
+    private final String TAG = "BPDroid"; // Logging tag -> will be used to filter the logcat file
     private final String MethodStartTAG = "METHOD_START";
     private final String MethodEndTAG = "METHOD_END";
     private final double NOMINAL_VOLTAGE = 3.958696693;
@@ -215,7 +215,7 @@ public class LogCatReader implements Runnable {
 
                 String line;
                 while ((line = logcatReader.readLine()) != null && running && updatingFlag) {
-                    //Filters the lines of the LogCat file with our considered TAG which is GreenMeter
+                    //Filters the lines of the LogCat file with our considered TAG which is GreenMeter/BPDroid
                     if (line.contains(TAG)) {
 
                         // ******************************************  ANDROID API CALLS ENERGY *********************************************
@@ -366,24 +366,24 @@ public class LogCatReader implements Runnable {
                                                             boolean received = (entryCurrent.getValue()[0] - entryInitial.getValue()[0]) > 0;
                                                             boolean sent = (entryCurrent.getValue()[1] - entryInitial.getValue()[1]) > 0;
 
-                                                            if (entryCurrent.getKey().contains("wlan0")){//Wifi
-                                                                int[] linkSpeedMethod = AdbUtils.wifiLinkSpeed();
-                                                                if (linkSpeedMethod != null && linkSpeedMethod.length != 0){
-                                                                    batteryChargeHelper = calculateNetworkBatteryConsumption(received,sent,entryInitial,entryCurrent,selfTimeSeconds,batteryChargeStamp,linkSpeedMethod);
-                                                                    if (batteryChargeHelper != -1){
-                                                                        hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
-                                                                        batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
+                                                            if (received || sent){
+                                                                if (entryCurrent.getKey().contains("wlan0")){//Wifi
+                                                                    int[] linkSpeedMethod = AdbUtils.wifiLinkSpeed();
+                                                                    if (linkSpeedMethod != null && linkSpeedMethod.length != 0){
+                                                                        batteryChargeHelper = calculateNetworkBatteryConsumption(received,sent,entryInitial,entryCurrent,selfTimeSeconds,batteryChargeStamp,linkSpeedMethod);
+                                                                        if (batteryChargeHelper != -1){
+                                                                            hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
+                                                                            batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
+                                                                        }
+                                                                    }else {
+                                                                        System.out.println("[GreenEdge -> LogCatReader -> Run$ Wifi link speed is not available!");
                                                                     }
-                                                                }else {
-                                                                    System.out.println("[GreenEdge -> LogCatReader -> Run$ Wifi link speed is not available!");
+                                                                }else if (entryCurrent.getKey().contains("eth0")){//Radio/cellular/modem
+                                                                    batteryChargeHelper = calculateNetworkBatteryConsumption(received,sent,entryInitial,entryCurrent,selfTimeSeconds,batteryChargeStamp,null);
+                                                                    hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
+                                                                    batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
                                                                 }
-                                                            }else{//Radio/cellular/modem
-                                                                batteryChargeHelper = calculateNetworkBatteryConsumption(received,sent,entryInitial,entryCurrent,selfTimeSeconds,batteryChargeStamp,null);
-                                                                hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
-                                                                batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
                                                             }
-
-
 
 //                                                            batteryChargeHelper = calculateNetworkBatteryConsumption(received,sent,entryInitial,entryCurrent,selfTimeSeconds,batteryChargeStamp,);
 //                                                            hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
@@ -416,23 +416,26 @@ public class LogCatReader implements Runnable {
                                                     boolean received = (entryCurrent.getValue()[0]) > 0;
                                                     boolean sent = (entryCurrent.getValue()[1]) > 0;
 
-                                                    if (entryCurrent.getKey().contains("wlan0")){//Wifi
-                                                        int[] linkSpeedMethod = AdbUtils.wifiLinkSpeed();
-                                                        if (linkSpeedMethod != null && linkSpeedMethod.length != 0){
-                                                            batteryChargeHelper = calculateNetworkBatteryConsumption(received,sent,null,entryCurrent,selfTimeSeconds,batteryChargeStamp,linkSpeedMethod);
-                                                            if (batteryChargeHelper != -1){
-                                                                hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
-                                                                batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
+                                                    if (received || sent){
+                                                        if (entryCurrent.getKey().contains("wlan0")){//Wifi
+                                                            int[] linkSpeedMethod = AdbUtils.wifiLinkSpeed();
+                                                            if (linkSpeedMethod != null && linkSpeedMethod.length != 0){
+                                                                batteryChargeHelper = calculateNetworkBatteryConsumption(received,sent,null,entryCurrent,selfTimeSeconds,batteryChargeStamp,linkSpeedMethod);
+                                                                if (batteryChargeHelper != -1){
+                                                                    hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
+                                                                    batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
+                                                                }
+                                                            }else {
+                                                                System.out.println("[GreenEdge -> LogCatReader -> Run$ Wifi link speed is not available!");
                                                             }
-                                                        }else {
-                                                            System.out.println("[GreenEdge -> LogCatReader -> Run$ Wifi link speed is not available!");
+                                                        }else if (entryCurrent.getKey().contains("eth0")){//Radio/cellular/modem
+                                                            batteryChargeHelper = calculateNetworkBatteryConsumption(received,sent,null,entryCurrent,selfTimeSeconds,batteryChargeStamp,null);
+                                                            hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
+                                                            batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
                                                         }
-                                                    }else{//Radio/cellular/modem
-                                                        batteryChargeHelper = calculateNetworkBatteryConsumption(received,sent,null,entryCurrent,selfTimeSeconds,batteryChargeStamp,null);
-                                                        hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
-                                                        batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
-                                                    }
 //
+                                                    }
+
 //                                                    batteryChargeHelper = calculateNetworkBatteryConsumption(received,sent,entryCurrent,selfTimeSeconds,batteryChargeStamp);
 //                                                    hwBatteryConsumptionValue = hwBatteryConsumptionValue + batteryChargeHelper;
 //                                                    batteryChargeStamp = batteryChargeStamp - batteryChargeHelper;
@@ -738,9 +741,10 @@ public class LogCatReader implements Runnable {
                             if(AdbUtils.isScreenOn()){
                                 double brightnessLevelOfScreen = AdbUtils.getScreenBrightnessLevel();
                                 if (brightnessLevelOfScreen != -1){
-
+//                                    System.out.println("Camera is in use");
                                     batteryLevel = batteryLevel - (batteryPercentageInOneSecond(PowerXML.getScreenOn()) + batteryPercentageInOneSecond((PowerXML.getScreenFull() * (brightnessLevelOfScreen)/255)));
                                 }else {
+//                                    System.out.println("Camera is in use");
                                     batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getScreenOn());
                                 }
                             }
@@ -750,8 +754,10 @@ public class LogCatReader implements Runnable {
                         if (AdbUtils.isAppCurrentFocusOFScreen(applicationPackageName)){
                             double brightnessLevelOfScreen = AdbUtils.getScreenBrightnessLevel();
                             if (brightnessLevelOfScreen != -1){
+//                                System.out.println("Screen is in use");
                                 batteryLevel = batteryLevel - (batteryPercentageInOneSecond(PowerXML.getScreenOn()) + batteryPercentageInOneSecond((PowerXML.getScreenFull() * (brightnessLevelOfScreen)/255)));
                             }else {
+//                                System.out.println("Screen is in use-else");
                                 batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getScreenOn());
                             }
 
@@ -759,6 +765,7 @@ public class LogCatReader implements Runnable {
 
                         //GPS battery consumption
                         if (AdbUtils.isUsingGPS(applicationPackageName)){
+//                            System.out.println("GPS is in use");
                             batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getGpsOn());
                         }
 
@@ -774,16 +781,23 @@ public class LogCatReader implements Runnable {
                                                 boolean received = (entryCurrent.getValue()[0] - entryInitial.getValue()[0]) > 0;
                                                 boolean sent = (entryCurrent.getValue()[1] - entryInitial.getValue()[1]) > 0;
 
-                                                if (entryCurrent.getKey().contains("wlan0")) {//Wifi
-                                                    int[] linkSpeed = AdbUtils.wifiLinkSpeed();
-                                                    if (linkSpeed != null && linkSpeed.length != 0){
-                                                        calculateNetworkBatteryConsumptionInOneSecond(received,sent,entryInitial,entryCurrent,linkSpeed);
-                                                    }else {
-                                                        System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$ Link speed is not available!");
+                                                if (received || sent){
+//                                                    System.out.println("Network is in use");
+                                                    if (entryCurrent.getKey().contains("wlan0")) {//Wifi
+//                                                        System.out.println("Wifi is in use");
+                                                        int[] linkSpeed = AdbUtils.wifiLinkSpeed();
+                                                        if (linkSpeed != null && linkSpeed.length != 0){
+                                                            calculateNetworkBatteryConsumptionInOneSecond(received,sent,entryInitial,entryCurrent,linkSpeed);
+                                                        }else {
+                                                            System.out.println("[GreenEdge -> LogCatReader -> updateLineGraph$ Link speed is not available!");
+                                                        }
+                                                    }else if (entryCurrent.getKey().contains("eth0:")){//Radio/cellular/modem
+//                                                        System.out.println("Cellular data is in use");
+                                                        calculateNetworkBatteryConsumptionInOneSecond(received,sent,entryInitial,entryCurrent,null);
                                                     }
-                                                }else {//Radio/cellular/modem
-                                                    calculateNetworkBatteryConsumptionInOneSecond(received,sent,entryInitial,entryCurrent,null);
                                                 }
+
+
 
 //                                                calculateNetworkBatteryConsumptionInOneSecond(received,sent,entryCurrent);
 
@@ -858,6 +872,7 @@ public class LogCatReader implements Runnable {
 
                         //Bluetooth battery consumption
                         if (AdbUtils.isBluetoothConnected()){
+//                            System.out.println("Bluetooth is in use");
                             batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getBluetoothActive());
                         }
 
@@ -940,7 +955,7 @@ public class LogCatReader implements Runnable {
                         }else {
                             // TODO: Check the assumption with Prof. Paulo
                             // We assumed if there aren't level and radioActive values, the signal is weak
-                            batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getModemTX4() + PowerXML.getModemRX());
+                            batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getModemTX0() + PowerXML.getModemRX());
                         }
                         break;
                 }
@@ -1016,8 +1031,8 @@ public class LogCatReader implements Runnable {
                             batteryLevel = batteryLevel - batteryPercentageInOneSecond (PowerXML.getRadioActive());
                         }else {
                             // TODO: Check the assumption with Prof. Paulo
-                            // We assumed if there aren't level and radioActive value, the signal is weak
-                            batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getModemTX4());
+                            // We assumed if there aren't level and radioActive value, the signal is strong
+                            batteryLevel = batteryLevel - batteryPercentageInOneSecond(PowerXML.getModemTX0());
                         }
                         break;
                 }
@@ -1085,8 +1100,8 @@ public class LogCatReader implements Runnable {
                             batteryConsumptionHelper = batteryPercentage(PowerXML.getRadioActive(),selfTimePeriod,stamp);
                         }else {
                             // TODO: Check the assumption with Prof. Paulo
-                            // We assumed if there aren't level and radioActive values, the signal is weak
-                            batteryConsumptionHelper = batteryPercentage((PowerXML.getModemTX4() + PowerXML.getModemRX()),selfTimePeriod,stamp);
+                            // We assumed if there aren't level and radioActive values, the signal is strong
+                            batteryConsumptionHelper = batteryPercentage((PowerXML.getModemTX0() + PowerXML.getModemRX()),selfTimePeriod,stamp);
                         }
                         return batteryConsumptionHelper;
                 }
@@ -1159,8 +1174,8 @@ public class LogCatReader implements Runnable {
                             batteryConsumptionHelper = batteryPercentage(PowerXML.getRadioActive(),selfTimePeriod,stamp);
                         }else {
                             // TODO: Check the assumption with Prof. Paulo
-                            // We assumed if there isn't level and radioActivie value, the signal is weak
-                            batteryConsumptionHelper = batteryPercentage(PowerXML.getModemTX4(),selfTimePeriod,stamp);
+                            // We assumed if there isn't level and radioActivie value, the signal is strong
+                            batteryConsumptionHelper = batteryPercentage(PowerXML.getModemTX0(),selfTimePeriod,stamp);
                         }
                         return batteryConsumptionHelper;
                 }
